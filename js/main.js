@@ -320,10 +320,14 @@ function processAvatars() {
             const data = imgData.data;
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i], g = data[i+1], b = data[i+2];
-                // Remove VERDE
-                if (g > 100 && g > r * 1.4 && g > b * 1.4) data[i+3] = 0;
-                // Remove AZUL (Para o Tony)
-                if (b > 100 && b > r * 1.4 && b > g * 1.4) data[i+3] = 0;
+                
+                // Algoritmo de Distância de Cor Inteligente
+                const isGreen = (g > 80 && g > r * 1.2 && g > b * 1.2);
+                const isBlue  = (b > 80 && b > r * 1.1 && b > g * 1.1);
+                
+                if (isGreen || isBlue) {
+                    data[i+3] = 0; // Transparência Total
+                }
             }
             ctx.putImageData(imgData, 0, 0);
             avatar.style.backgroundImage = `url('${canvas.toDataURL()}')`;

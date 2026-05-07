@@ -309,30 +309,32 @@ p {
 /* Carrossel de Personagens Otimizado */
 .char-options {
     display: flex;
+    flex-wrap: nowrap;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
-    gap: clamp(10px, 3vw, 20px);
-    padding: 10px 5px 20px;
+    gap: 15px;
+    padding: 15px 10px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    width: 100%;
 }
 .char-options::-webkit-scrollbar { display: none; }
 
 .char-btn {
-    flex: 0 0 clamp(100px, 30vw, 130px); /* Escala controlada */
+    flex: 0 0 110px; /* Largura fixa para o carrossel */
     scroll-snap-align: center;
     position: relative;
     background: rgba(255,255,255,0.03);
     border: 2px solid rgba(255,255,255,0.1);
-    border-radius: 20px;
-    padding: 15px 10px;
+    border-radius: 18px;
+    padding: 12px 8px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    min-height: 140px;
+    gap: 8px;
+    min-height: 130px;
 }
 
 .char-btn.selected {
@@ -585,11 +587,6 @@ p {
 ══════════════════════════════════════ */
 @media (min-width: 480px) {
     .content-box { padding: 24px 24px 28px; }
-    .char-options {
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 12px;
-    }
     .char-avatar, .locked-avatar { width: 56px; height: 56px; }
     .char-btn span { font-size: 0.72rem; }
     h2 { letter-spacing: 3px; }
