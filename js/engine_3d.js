@@ -670,6 +670,10 @@ export class GameEngine3D {
         const hemiLight = new THREE.HemisphereLight(0x111122, 0x050505, 1.5);
         this.scene.add(hemiLight);
         
+        // Luz que segue o jogador (Dourada)
+        this.playerLight = new THREE.PointLight(0xffcc00, 3.0, 60); 
+        this.scene.add(this.playerLight);
+        
         const moonLight = new THREE.DirectionalLight(0xaaccff, 0.4); // Subtle moonlight instead of intense gold
         moonLight.position.set(-50, 100, -50);
         this.scene.add(moonLight);
@@ -1341,6 +1345,13 @@ export class GameEngine3D {
                 this.introStep = 5;
                 if (textEl) textEl.classList.remove('cin-pulse');
                 this._hideCinText(textEl);
+                
+                // RESET AMBIENTAL: Volta para as cores normais do jogo
+                this.scene.background.setHex(0x050508);
+                this.scene.fog.color.setHex(0x050508);
+                this.scene.fog.near = 10;
+                this.scene.fog.far = 300;
+
                 if (overlay) {
                     overlay.style.transition = 'background 1.5s ease-out, opacity 1.5s ease-out';
                     overlay.style.background = 'transparent';
@@ -1348,14 +1359,14 @@ export class GameEngine3D {
                     setTimeout(() => { 
                         overlay.style.display = 'none'; 
                         overlay.style.opacity = '1'; 
-                        overlay.style.background = 'rgba(0,0,0,0.85)';
+                        overlay.style.background = 'rgba(0,0,0,0.95)';
                     }, 1500);
                 }
                 this.isIntro = false;
                 this.gameSpeed = 38; 
-                this.renderer.toneMappingExposure = 1.3; // Reset forçado de iluminação
+                this.renderer.toneMappingExposure = 1.3; 
                 this.player.sprite.position.z = 0;
-                console.log('[Cinematic] Safety End triggered or finished.');
+                console.log('[Cinematic] Environment Reset & Finished.');
             }
         }
     }
