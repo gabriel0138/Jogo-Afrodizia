@@ -1175,7 +1175,8 @@ export class GameEngine3D {
         console.log("[Engine] Iniciando Cinemática...");
         this.isReady = true;
         this.isIntro = true;
-        this.introTimer = 0; // Garante que comece do zero
+        this.introTimer = 0; 
+        this.introStep = 0; // CRUCIAL: Reseta o controle de atos da narrativa
         
         // Reseta o player para o centro, posicionado mais à frente para a câmera
         this.currentLane = 1;
@@ -1190,10 +1191,14 @@ export class GameEngine3D {
         const textEl = document.getElementById('cinematic-text');
         const logoEl = document.getElementById('cinematic-logo');
         
-        if (overlay) overlay.style.display = 'flex';
-        if (logoEl) {
-            logoEl.style.opacity = "1";
-            logoEl.style.transform = "scale(1)";
+        if (overlay) {
+            overlay.style.display = 'flex';
+            overlay.style.background = 'rgba(0,0,0,0.85)';
+            overlay.style.opacity = '1';
+        }
+        if (textEl) {
+            textEl.innerText = '';
+            textEl.style.opacity = '0';
         }
         
         // Força sprite de pulo (punho erguido dinâmico) enquanto cai
