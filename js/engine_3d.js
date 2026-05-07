@@ -667,14 +667,15 @@ export class GameEngine3D {
 
         // Optimized Cinematic Lighting Setup
         // Hemisphere light gives a natural gradient from sky to ground (Blueish sky, dark asphalt reflection)
-        const hemiLight = new THREE.HemisphereLight(0x111122, 0x050505, 1.5);
+        // Hemisphere light (Céu azulado, Solo com leve rebatimento de asfalto)
+        const hemiLight = new THREE.HemisphereLight(0x222244, 0x222222, 1.8);
         this.scene.add(hemiLight);
         
         // Luz que segue o jogador (Dourada)
         this.playerLight = new THREE.PointLight(0xffcc00, 3.0, 60); 
         this.scene.add(this.playerLight);
         
-        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.4); // Subtle moonlight instead of intense gold
+        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.8); // Luz da lua mais forte para contorno
         moonLight.position.set(-50, 100, -50);
         this.scene.add(moonLight);
         
@@ -761,8 +762,8 @@ export class GameEngine3D {
                         const newMat = new THREE.MeshLambertMaterial({
                             map: child.material.map,
                             color: child.material.color,
-                            emissive: isShadow ? new THREE.Color(0x000000) : new THREE.Color(0xffcc00),
-                            emissiveIntensity: isShadow ? 0.0 : 0.05,
+                            emissive: isShadow ? new THREE.Color(0x000000) : new THREE.Color(0x444444),
+                            emissiveIntensity: isShadow ? 0.0 : 0.15,
                             transparent: child.material.transparent,
                             opacity: child.material.opacity
                         });
@@ -1349,8 +1350,8 @@ export class GameEngine3D {
                 // RESET AMBIENTAL: Volta para as cores normais do jogo
                 this.scene.background.setHex(0x050508);
                 this.scene.fog.color.setHex(0x050508);
-                this.scene.fog.near = 10;
-                this.scene.fog.far = 300;
+                this.scene.fog.near = 80;
+                this.scene.fog.far = 550; // Mantém a visão de longo alcance
 
                 if (overlay) {
                     overlay.style.transition = 'background 1.5s ease-out, opacity 1.5s ease-out';
