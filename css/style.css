@@ -337,6 +337,26 @@ p {
     min-height: 130px;
 }
 
+.char-btn.locked {
+    filter: grayscale(0.8) contrast(0.8);
+    opacity: 0.7;
+}
+
+.lock-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(2px);
+    display: none; /* Controlado via JS */
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    z-index: 10;
+    pointer-events: none;
+    border-radius: 18px;
+}
+
 .char-btn.selected {
     border-color: var(--primary);
     background: rgba(255, 204, 0, 0.15);

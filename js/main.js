@@ -130,7 +130,7 @@ async function submitRegister(skip = false) {
         const insta = instaInput.value.trim().replace(/^@/, '').toLowerCase();
         
         if (!name || !insta) {
-            errorEl.innerText = "Preencha todos os campos.";
+            if (errorEl) errorEl.innerText = "POR FAVOR, PREENCHA OS CAMPOS.";
             return;
         }
 
@@ -138,13 +138,23 @@ async function submitRegister(skip = false) {
         playerInstagram = insta;
         localStorage.setItem('afrodiziaName', name);
         localStorage.setItem('afrodiziaInstagram', insta);
+        
+        // Tenta sincronizar imediatamente após registro
+        try {
+            const profile = await getPlayerProfile(insta);
+            if (profile) {
+                totalVozes = Math.max(totalVozes, parseInt(profile.total_vozes || 0));
+                const serverChars = profile.unlocked_chars || ['massau'];
+                unlockedChars = Array.from(new Set([...unlockedChars, ...serverChars]));
+            }
+        } catch(e) {}
     } else {
         playerName = "Visitante";
-        playerInstagram = "";
+        playerInstagram = "visitante_" + Math.floor(Math.random()*1000);
     }
 
-    registerScreen.style.display = 'none';
-    startScreen.style.display = 'flex';
+    if (registerScreen) registerScreen.style.display = 'none';
+    if (startScreen) startScreen.style.display = 'flex';
     updateUI();
 }
 
@@ -153,16 +163,16 @@ function updateUI() {
     
     document.querySelectorAll('.char-btn').forEach(btn => {
         const charId = btn.dataset.char;
-        const cost = parseInt(btn.dataset.cost || 0);
+        const lock = btn.querySelector('.lock-overlay');
         
-        // 1. Gerencia bloqueio
         if (unlockedChars.includes(charId)) {
             btn.classList.remove('locked');
+            if (lock) lock.style.display = 'none';
         } else {
             btn.classList.add('locked');
+            if (lock) lock.style.display = 'flex';
         }
 
-        // 2. Gerencia seleção visual
         if (charId === lastSelectedChar) {
             btn.classList.add('selected');
         } else {

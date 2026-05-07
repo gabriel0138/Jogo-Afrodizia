@@ -1342,21 +1342,26 @@ export class GameEngine3D {
                 this.camera.updateProjectionMatrix();
             }
 
-            // FIM DA CINEMATICA
-            if (T > 9.5 && this.introStep === 4) {
+            // FIM DA CINEMATICA (SEGURANÇA REFORÇADA)
+            if ((T > 9.5 && this.introStep === 4) || this.introTimer > 12.0) {
                 this.introStep = 5;
                 if (textEl) textEl.classList.remove('cin-pulse');
                 this._hideCinText(textEl);
                 if (overlay) {
-                    overlay.style.transition = 'background 1.2s ease-out, opacity 1.2s ease-out';
+                    overlay.style.transition = 'background 1.5s ease-out, opacity 1.5s ease-out';
                     overlay.style.background = 'transparent';
                     overlay.style.opacity    = '0';
-                    setTimeout(() => { overlay.style.display = 'none'; overlay.style.opacity = '1'; }, 1200);
+                    setTimeout(() => { 
+                        overlay.style.display = 'none'; 
+                        overlay.style.opacity = '1'; 
+                        overlay.style.background = 'rgba(0,0,0,0.85)';
+                    }, 1500);
                 }
                 this.isIntro = false;
-                this.gameSpeed = 40;
+                this.gameSpeed = 38; 
+                this.renderer.toneMappingExposure = 1.3; // Reset forçado de iluminação
                 this.player.sprite.position.z = 0;
-                console.log('[Cinematic] Finished');
+                console.log('[Cinematic] Safety End triggered or finished.');
             }
         }
     }
