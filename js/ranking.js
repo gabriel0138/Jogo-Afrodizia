@@ -30,6 +30,7 @@ export async function saveScore(entry) {
         instagram: entry.instagram.replace(/[^a-zA-Z0-9._]/g, '').substring(0, 30),
         character: entry.character,
         score:     Math.min(Math.max(0, parseInt(entry.score) || 0), 999999),
+        totalVozes: parseInt(entry.totalVozes) || 0,
         timestamp: Date.now(),
     };
 
@@ -44,7 +45,10 @@ export async function saveScore(entry) {
         if (res.ok) {
             console.log('[Ranking] Score enviado para o Vercel!');
             const data = await res.json();
-            return { rank: data.rank || '??' };
+            return { 
+                rank: data.rank || '??',
+                totalVozes: data.totalVozes || payload.totalVozes
+            };
         }
         throw new Error('API indisponível');
     } catch (err) {
@@ -56,7 +60,23 @@ export async function saveScore(entry) {
     const all = getLocalScores();
     const sorted = all.sort((a, b) => b.score - a.score);
     const rank = sorted.findIndex(e => e.instagram === payload.instagram && e.score === payload.score) + 1;
-    return { rank: rank || all.length };
+    return { rank: rank || all.length, totalVozes: payload.totalVozes };
+}
+
+/**
+ * GET_PROFILE: Busca os dados de um jogador específico para sincronizar
+ */
+export async function getPlayerProfile(instagram) {
+    if (!instagram) return null;
+    try {
+        const res = await fetch(`${VERCEL_API_URL}?instagram=${instagram}`);
+        if (res.ok) {
+            return await res.json();
+        }
+    } catch (err) {
+        console.warn('[Ranking] Erro ao buscar perfil remoto.', err);
+    }
+    return null;
 }
 
 /** 

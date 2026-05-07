@@ -15,11 +15,18 @@ export default async function handler(req, res) {
 
     try {
         if (req.method === 'GET') {
-            const limit = parseInt(req.query.limit) || 10;
+            const { instagram, limit } = req.query;
+
+            // Busca perfil individual se o instagram for passado
+            if (instagram) {
+                const data = await kv.hget(PLAYER_DATA_KEY, instagram.toLowerCase().trim());
+                return res.status(200).json(data ? (typeof data === 'string' ? JSON.parse(data) : data) : null);
+            }
+
+            const limitNum = parseInt(limit) || 10;
             
             // Busca os top N do Sorted Set
-            // ZREVRANGE retorna os membros (instagrams) do maior para o menor
-            const topInstagrams = await kv.zrevrange(RANKING_KEY, 0, limit - 1);
+            const topInstagrams = await kv.zrevrange(RANKING_KEY, 0, limitNum - 1);
             
             if (topInstagrams.length === 0) {
                 return res.status(200).json([]);
@@ -38,7 +45,7 @@ export default async function handler(req, res) {
         }
 
         if (req.method === 'POST') {
-            const { name, instagram, character, score, timestamp } = req.body;
+            const { name, instagram, character, score, totalVozes, timestamp } = req.body;
 
             if (!instagram || score === undefined) {
                 return res.status(400).json({ error: 'Instagram e Score são obrigatórios' });
@@ -46,20 +53,23 @@ export default async function handler(req, res) {
 
             const cleanInsta = instagram.toLowerCase().trim();
 
-            // 1. Verifica se o score novo é maior que o antigo no KV (ou apenas sobrescreve se preferir)
-            // O ZADD com a opção default atualiza o score se o membro já existe.
-            await kv.zadd(RANKING_KEY, { score: score, member: cleanInsta });
+            // 1. Atualiza o recorde no Ranking (Sorted Set)
+            const currentBest = await kv.zscore(RANKING_KEY, cleanInsta) || 0;
+            if (score > currentBest) {
+                await kv.zadd(RANKING_KEY, { score: score, member: cleanInsta });
+            }
 
-            // 2. Salva os detalhes do jogador (para mostrar nome e ícone no ranking)
+            // 2. Salva/Atualiza os detalhes do jogador (incluindo total acumulado)
+            const existingData = await kv.hget(PLAYER_DATA_KEY, cleanInsta) || {};
             const playerData = {
-                name,
+                name: name || existingData.name,
                 instagram: cleanInsta,
-                character,
-                score,
+                character: character || existingData.character,
+                score: Math.max(score, existingData.score || 0),
+                totalVozes: totalVozes !== undefined ? totalVozes : (existingData.totalVozes || 0),
                 timestamp: timestamp || Date.now()
             };
             
-            // Só salva os detalhes se for o novo recorde (opcional, aqui vamos salvar sempre o último)
             await kv.hset(PLAYER_DATA_KEY, { [cleanInsta]: JSON.stringify(playerData) });
 
             // 3. Calcula a posição atual (Rank)
@@ -67,7 +77,8 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ 
                 success: true, 
-                rank: rank !== null ? rank + 1 : '??' 
+                rank: rank !== null ? rank + 1 : '??',
+                totalVozes: playerData.totalVozes
             });
         }
 

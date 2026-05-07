@@ -1,6 +1,6 @@
 import { AudioSystem } from './audio.js';
 import { GameEngine3D } from './engine_3d.js';
-import { saveScore, getTopScores, renderRankingHTML, CHAR_ICONS, CHAR_NAMES } from './ranking.js';
+import { saveScore, getTopScores, getPlayerProfile, renderRankingHTML, CHAR_ICONS, CHAR_NAMES } from './ranking.js';
 
 // ── DOM Elements ──────────────────────────────────────────
 const registerScreen = document.getElementById('register-screen');
@@ -61,19 +61,40 @@ const charSkills = {
 // REGISTRO
 // ═══════════════════════════════════════════════════════════
 
-function submitRegister(skip = false) {
+async function submitRegister(skip = false) {
+    registerError.innerText = '';
+    
     if (!skip) {
         const name  = inputName.value.trim();
-        const insta = inputInstagram.value.trim().replace(/^@/, '');
+        const insta = inputInstagram.value.trim().replace(/^@/, '').toLowerCase();
         if (!name) { registerError.innerText = 'Insira seu nome.'; return; }
-        playerName = name;
-        playerInstagram = insta;
-        sessionStorage.setItem('afrodiziaName', name);
-        sessionStorage.setItem('afrodiziaInstagram', insta);
+        if (!insta) { registerError.innerText = 'Insira seu @Instagram.'; return; }
+        
+        btnRegister.disabled = true;
+        btnRegister.innerText = 'Sincronizando...';
+
+        // Sincroniza com o servidor se já existir conta
+        const profile = await getPlayerProfile(insta);
+        if (profile) {
+            playerName = profile.name || name;
+            playerInstagram = insta;
+            totalVozes = profile.totalVozes || 0;
+            localStorage.setItem('afrodiziaTotalVozes', totalVozes);
+            console.log(`[Sync] Perfil recuperado: ${totalVozes} vozes.`);
+        } else {
+            playerName = name;
+            playerInstagram = insta;
+        }
+
+        sessionStorage.setItem('afrodiziaName', playerName);
+        sessionStorage.setItem('afrodiziaInstagram', playerInstagram);
+        btnRegister.disabled = false;
+        btnRegister.innerText = 'ENTRAR NA MARCHA →';
     } else {
         playerName = 'Anonimo';
         playerInstagram = '';
     }
+    
     registerScreen.style.display = 'none';
     startScreen.style.display    = 'flex';
     updateUI();
@@ -92,7 +113,8 @@ if (playerName) {
 // ═══════════════════════════════════════════════════════════
 
 function updateUI() {
-    if (totalVozesEl) totalVozesEl.innerText = totalVozes.toLocaleString('pt-BR');
+    const vozesSafe = parseInt(totalVozes) || 0;
+    if (totalVozesEl) totalVozesEl.innerText = vozesSafe.toLocaleString('pt-BR');
     
     document.querySelectorAll('.char-btn').forEach(btn => {
         const charId = btn.dataset.char;
@@ -234,29 +256,56 @@ async function endGame(score) {
     uiContainer.style.display = 'none';
     endScreen.style.display   = 'flex';
 
-    const charId = engine ? engine.selectedChar : 'massau';
+    const charId = (engine && engine.selectedChar) ? engine.selectedChar : 'massau';
     const charIcon = CHAR_ICONS[charId] || '🎵';
 
-    if (finalScoreEl) finalScoreEl.innerText = score.toLocaleString('pt-BR');
-    document.getElementById('result-char-icon').innerText = charIcon;
-    document.getElementById('result-player-name').innerText = playerName || 'Jogador';
-    document.getElementById('result-player-insta').innerText = playerInstagram ? `@${playerInstagram}` : '';
+    const scoreSafe = parseInt(score) || 0;
+    if (finalScoreEl) finalScoreEl.innerText = scoreSafe.toLocaleString('pt-BR');
+    
+    const charIconEl = document.getElementById('result-char-icon');
+    if (charIconEl) charIconEl.innerText = charIcon;
+    
+    const playerNameEl = document.getElementById('result-player-name');
+    if (playerNameEl) playerNameEl.innerText = playerName || 'Jogador';
+    
+    const playerInstaEl = document.getElementById('result-player-insta');
+    if (playerInstaEl) playerInstaEl.innerText = playerInstagram ? `@${playerInstagram}` : '';
 
-    totalVozes += score;
+    totalVozes += scoreSafe;
     localStorage.setItem('afrodiziaTotalVozes', totalVozes);
     updateUI();
 
     const badgeEl = document.getElementById('result-rank-badge');
-    if (playerInstagram && score > 0) {
-        badgeEl.innerText = 'Salvando no Ranking...';
-        const { rank } = await saveScore({ name: playerName, instagram: playerInstagram, character: charId, score });
-        badgeEl.innerText = `Voce ficou em #${rank} no ranking mundial!`;
+    if (playerInstagram && scoreSafe > 0) {
+        if (badgeEl) badgeEl.innerText = 'Salvando no Ranking...';
+        const result = await saveScore({ 
+            name: playerName, 
+            instagram: playerInstagram, 
+            character: charId, 
+            score: scoreSafe,
+            totalVozes: totalVozes
+        });
+        
+        if (result) {
+            if (badgeEl) badgeEl.innerText = `Voce ficou em #${result.rank} no ranking mundial!`;
+            if (result.totalVozes) {
+                totalVozes = result.totalVozes;
+                localStorage.setItem('afrodiziaTotalVozes', totalVozes);
+                updateUI();
+            }
+        }
     }
     loadRanking(rankingList, 8);
 }
 
 btnStart?.addEventListener('click', startGame);
-btnRestart?.addEventListener('click', startGame);
+
+btnRestart?.addEventListener('click', () => {
+    // Retorna a tela principal para trocar de personagem ou ver ranking
+    endScreen.style.display = 'none';
+    startScreen.style.display = 'flex';
+    updateUI();
+});
 
 // ═══════════════════════════════════════════════════════════
 // RANKING & CHROMA KEY & CERTIFICADO
