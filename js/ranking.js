@@ -3,7 +3,7 @@
 // ==========================================
 
 // Substitua pela URL da sua API no Vercel após o deploy
-const VERCEL_API_URL = 'ranking.php'; 
+const API_URL = 'ranking.php'; 
 
 export const CHAR_ICONS = {
     massau:   '🎤',
@@ -22,7 +22,7 @@ export const CHAR_NAMES = {
 };
 
 /** 
- * SAVE: Envia o score para o banco Vercel ou localStorage
+ * SAVE: Envia o score e sincroniza o progresso com a Locaweb
  */
 export async function saveScore(entry) {
     const payload = {
@@ -31,36 +31,36 @@ export async function saveScore(entry) {
         character: entry.character,
         score:     Math.min(Math.max(0, parseInt(entry.score) || 0), 999999),
         totalVozes: parseInt(entry.totalVozes) || 0,
+        unlockedChars: entry.unlockedChars || ['massau'], // CRUCIAL: Salva o progresso
         timestamp: Date.now(),
     };
 
-    // --- Tenta enviar para sua API no Vercel ---
     try {
-        const res = await fetch(VERCEL_API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
         if (res.ok) {
-            console.log('[Ranking] Score enviado para o Vercel!');
+            console.log('[Ranking] Sincronizado com Locaweb!');
             const data = await res.json();
             return { 
                 rank: data.rank || '??',
-                totalVozes: data.totalVozes || payload.totalVozes
+                totalVozes: data.totalVozes || payload.totalVozes,
+                unlockedChars: data.unlockedChars || payload.unlockedChars
             };
         }
-        throw new Error('API indisponível');
     } catch (err) {
-        console.warn('[Ranking] API Vercel offline, salvando localmente.', err);
+        console.warn('[Ranking] Modo offline ativado.', err);
         _saveLocal(payload);
     }
 
-    // Calcula posição no ranking local
+    // Fallback local
     const all = getLocalScores();
     const sorted = all.sort((a, b) => b.score - a.score);
     const rank = sorted.findIndex(e => e.instagram === payload.instagram && e.score === payload.score) + 1;
-    return { rank: rank || all.length, totalVozes: payload.totalVozes };
+    return { rank: rank || '-', totalVozes: payload.totalVozes, unlockedChars: payload.unlockedChars };
 }
 
 /**
@@ -69,7 +69,7 @@ export async function saveScore(entry) {
 export async function getPlayerProfile(instagram) {
     if (!instagram) return null;
     try {
-        const res = await fetch(`${VERCEL_API_URL}?instagram=${instagram}`);
+        const res = await fetch(`${API_URL}?instagram=${instagram}`);
         if (res.ok) {
             return await res.json();
         }
@@ -84,7 +84,7 @@ export async function getPlayerProfile(instagram) {
  */
 export async function getTopScores(limit = 10) {
     try {
-        const res = await fetch(`${VERCEL_API_URL}?limit=${limit}`);
+        const res = await fetch(`${API_URL}?limit=${limit}`);
         if (res.ok) {
             return await res.json();
         }

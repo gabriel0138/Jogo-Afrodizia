@@ -33,13 +33,18 @@ let animId = null;
 
 async function init() {
     try {
+        // 1. CARREGAMENTO INSTANTÂNEO (Local)
+        const localChars = localStorage.getItem('afrodiziaUnlockedChars');
+        if (localChars) unlockedChars = JSON.parse(localChars);
+        
+        updateUI(); 
+
         updateLoading(10, "INICIALIZANDO ENGINE...");
         engine = new GameEngine3D(gameContainer, null);
         
         updateLoading(30, "CARREGANDO SONS...");
         audioSys = new AudioSystem('bg-music');
         
-        // SINCRONIZAÇÃO: Quando a música acabar, acaba o jogo!
         audioSys.onEnded = () => {
             console.log("[Audio] Trilha sonora finalizada.");
             if (isPlaying) endGame(engine ? engine.score : 0);
@@ -48,13 +53,20 @@ async function init() {
         updateLoading(50, "PREPARANDO LÍDERES...");
         await preloadAssets();
         
-        updateLoading(80, "SINCRONIZANDO RANKING...");
+        // 2. SINCRONIZAÇÃO EM SEGUNDO PLANO
         if (playerInstagram) {
-            const profile = await getPlayerProfile(playerInstagram);
-            if (profile) {
-                totalVozes = parseInt(profile.totalVozes) || totalVozes;
-                unlockedChars = profile.unlocked_chars || unlockedChars;
-            }
+            updateLoading(70, "SINCRONIZANDO...");
+            getPlayerProfile(playerInstagram).then(profile => {
+                if (profile) {
+                    totalVozes = Math.max(totalVozes, parseInt(profile.total_vozes || 0));
+                    const serverChars = profile.unlocked_chars || ['massau'];
+                    unlockedChars = Array.from(new Set([...unlockedChars, ...serverChars]));
+                    
+                    localStorage.setItem('afrodiziaTotalVozes', totalVozes);
+                    localStorage.setItem('afrodiziaUnlockedChars', JSON.stringify(unlockedChars));
+                    updateUI();
+                }
+            }).catch(e => console.warn("Modo Offline Ativo"));
         }
 
         updateLoading(100, "PRONTO!");
@@ -62,8 +74,7 @@ async function init() {
 
     } catch (err) {
         console.error("Erro na inicialização:", err);
-        loadingStatus.innerText = "ERRO AO CARREGAR. VERIFIQUE SUA CONEXÃO.";
-        loadingStatus.style.color = "#ff4444";
+        loadingStatus.innerText = "VERIFIQUE SUA CONEXÃO.";
     }
 }
 
@@ -221,7 +232,12 @@ function startGame() {
     const charId = selBtn ? selBtn.dataset.char : 'massau';
     
     engine.setPlayerCharacter(charId);
-    engine.onScoreUpdate = (s) => { scoreDisplay.innerText = s; };
+    engine.onScoreUpdate = (s) => { 
+        scoreDisplay.innerText = s; 
+        scoreDisplay.parentElement.classList.remove('score-pulse');
+        void scoreDisplay.parentElement.offsetWidth; // Force reflow
+        scoreDisplay.parentElement.classList.add('score-pulse');
+    };
     engine.onGameOver = endGame;
     
     isPlaying = true;

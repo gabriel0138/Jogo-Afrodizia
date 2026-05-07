@@ -1,17 +1,19 @@
 <?php
 /**
- * 💎 AFRODIZIA ENGINE - BACKEND OPTIMIZED (LOCAWEB EDITION)
- * Versão: 2.0 - Performance & Security Focus
+ * 💎 AFRODIZIA ENGINE - BACKEND V2.1 (ULTRA-ROBUST)
+ * Refatorado para Segurança Máxima e Performance
  */
 
 // --- CONFIGURAÇÕES DE CONEXÃO ---
-// DICA: Na Locaweb, verifique o host exato no painel (MySQL)
 $db_config = [
-    'host' => 'localhost', // Tente 'localhost' ou 'mysql.afrodizia1.hospedagemdesites.ws'
-    'db'   => 'afrodizia1', // Nome do banco criado no painel
-    'user' => 'afrodizia1', // Usuário do banco
-    'pass' => 'OneLoveAfro26@', // Senha fornecida
+    'host' => 'localhost',
+    'db'   => 'afrodizia1',
+    'user' => 'afrodizia1',
+    'pass' => 'OneLoveAfro26@',
 ];
+
+// Configurações de Gameplay (Anti-Cheat)
+$MAX_POSSIBLE_SCORE = 999999; 
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -20,17 +22,24 @@ header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
+// Log de erros personalizado para Locaweb
+function logError($msg) {
+    error_log("[Afrodizia DB Error] " . $msg);
+}
+
 try {
     $dsn = "mysql:host={$db_config['host']};dbname={$db_config['db']};charset=utf8mb4";
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
+        PDO::ATTR_PERSISTENT         => true // Performance: mantém conexão viva
     ];
     $pdo = new PDO($dsn, $db_config['user'], $db_config['pass'], $options);
 } catch (PDOException $e) {
+    logError($e->getMessage());
     http_response_code(500);
-    echo json_encode(["error" => "Falha na conexão", "debug" => "Verifique host/user/pass"]);
+    echo json_encode(["error" => "Falha crítica no sistema"]);
     exit;
 }
 
@@ -39,8 +48,9 @@ $method = $_SERVER['REQUEST_METHOD'];
 // 📥 GET: Ranking ou Perfil
 if ($method === 'GET') {
     if (isset($_GET['instagram'])) {
+        $insta = strtolower(trim($_GET['instagram']));
         $stmt = $pdo->prepare("SELECT * FROM afrodizia_players WHERE instagram = ? LIMIT 1");
-        $stmt->execute([strtolower(trim($_GET['instagram']))]);
+        $stmt->execute([$insta]);
         $player = $stmt->fetch();
         
         if ($player) {
@@ -48,7 +58,7 @@ if ($method === 'GET') {
         }
         echo json_encode($player ?: null);
     } else {
-        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
+        $limit = Math.min(100, isset($_GET['limit']) ? (int)$_GET['limit'] : 20);
         $stmt = $pdo->prepare("SELECT name, instagram, last_char as `character`, best_score as score, total_vozes as totalVozes FROM afrodizia_players ORDER BY best_score DESC LIMIT ?");
         $stmt->execute([$limit]);
         echo json_encode($stmt->fetchAll());
@@ -57,12 +67,10 @@ if ($method === 'GET') {
 
 // 📤 POST: Salvar Score e Sincronizar
 if ($method === 'POST') {
-    $raw = file_get_contents('php://input');
-    $data = json_decode($raw, true);
+    $data = json_decode(file_get_contents('php://input'), true);
     
     if (!$data || !isset($data['instagram'])) {
         http_response_code(400);
-        echo json_encode(["error" => "Payload inválido"]);
         exit;
     }
 
@@ -73,33 +81,50 @@ if ($method === 'POST') {
     $char  = $data['character'] ?? 'massau';
     $charsJson = json_encode($data['unlockedChars'] ?? ['massau']);
 
-    // UPSERT: Insere ou Atualiza se já existir o Instagram
-    $sql = "INSERT INTO afrodizia_players (instagram, name, best_score, total_vozes, unlocked_chars, last_char, total_runs) 
-            VALUES (:insta, :name, :score, :total, :chars, :last_char, 1)
-            ON DUPLICATE KEY UPDATE 
-            name = IF(:name2 != '', :name2, name),
-            best_score = GREATEST(best_score, :score2),
-            total_vozes = GREATEST(total_vozes, :total2),
-            unlocked_chars = :chars2,
-            last_char = :last_char2,
-            total_runs = total_runs + 1";
-    
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
-        ':insta' => $insta, ':name' => $name, ':score' => $score, ':total' => $total, ':chars' => $charsJson, ':last_char' => $char,
-        ':name2' => $name, ':score2' => $score, ':total2' => $total, ':chars2' => $charsJson, ':last_char2' => $char
-    ]);
+    // ANTI-CHEAT BÁSICO
+    if ($score > $MAX_POSSIBLE_SCORE) {
+        logError("Score suspeito de $insta: $score");
+        $score = $MAX_POSSIBLE_SCORE / 2; // Penaliza score impossível
+    }
 
-    // Rank Atual do Jogador
-    $stmtRank = $pdo->prepare("SELECT COUNT(*) + 1 as rank FROM afrodizia_players WHERE best_score > (SELECT best_score FROM afrodizia_players WHERE instagram = ?)");
-    $stmtRank->execute([$insta]);
-    $rank = $stmtRank->fetch()['rank'] ?? '-';
+    try {
+        $pdo->beginTransaction();
 
-    echo json_encode([
-        "success" => true, 
-        "rank" => $rank, 
-        "totalVozes" => $total,
-        "unlockedChars" => json_decode($charsJson)
-    ]);
+        $sql = "INSERT INTO afrodizia_players (instagram, name, best_score, total_vozes, unlocked_chars, last_char, total_runs) 
+                VALUES (:insta, :name, :score, :total, :chars, :last_char, 1)
+                ON DUPLICATE KEY UPDATE 
+                name = IF(:name2 != '', :name2, name),
+                best_score = GREATEST(best_score, :score2),
+                total_vozes = GREATEST(total_vozes, :total2),
+                unlocked_chars = :chars2,
+                last_char = :last_char2,
+                total_runs = total_runs + 1";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':insta' => $insta, ':name' => $name, ':score' => $score, ':total' => $total, ':chars' => $charsJson, ':last_char' => $char,
+            ':name2' => $name, ':score2' => $score, ':total2' => $total, ':chars2' => $charsJson, ':last_char2' => $char
+        ]);
+
+        // Rank Atual
+        $stmtRank = $pdo->prepare("SELECT COUNT(*) + 1 as rank FROM afrodizia_players WHERE best_score > (SELECT best_score FROM afrodizia_players WHERE instagram = ?)");
+        $stmtRank->execute([$insta]);
+        $rank = $stmtRank->fetch()['rank'] ?? '-';
+
+        $pdo->commit();
+
+        echo json_encode([
+            "success" => true, 
+            "rank" => $rank, 
+            "totalVozes" => $total,
+            "unlockedChars" => json_decode($charsJson)
+        ]);
+
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        logError($e->getMessage());
+        http_response_code(500);
+        echo json_encode(["error" => "Falha ao salvar"]);
+    }
 }
 ?>

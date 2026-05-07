@@ -861,8 +861,46 @@ export class GameEngine3D {
                         b.add(poster);
                     }
                     
+                    // --- SISTEMA DE JANELAS VIVAS (Shader Procedural) ---
+                    const windowMat = new THREE.ShaderMaterial({
+                        uniforms: {
+                            uTime: { value: 0 },
+                            uColor: { value: new THREE.Color(0xffcc00) }
+                        },
+                        vertexShader: `
+                            varying vec2 vUv;
+                            void main() {
+                                vUv = uv;
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                            }
+                        `,
+                        fragmentShader: `
+                            uniform float uTime;
+                            uniform vec3 uColor;
+                            varying vec2 vUv;
+                            void main() {
+                                // Cria um padrão de grade para janelas
+                                vec2 grid = fract(vUv * vec2(10.0, 20.0));
+                                float win = step(0.3, grid.x) * step(0.3, grid.y);
+                                // Piscar aleatório baseado no tempo e na posição
+                                float flicker = sin(uTime * 2.0 + vUv.y * 100.0) * 0.5 + 0.5;
+                                float active = step(0.95, fract(sin(dot(floor(vUv * 20.0), vec2(12.9898, 78.233))) * 43758.5453));
+                                gl_FragColor = vec4(uColor, win * active * flicker * 0.8);
+                            }
+                        `,
+                        transparent: true,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false
+                    });
+                    
+                    const windowPlane = new THREE.Mesh(new THREE.PlaneGeometry(12, 40), windowMat);
+                    windowPlane.position.set(side === 1 ? -15 : 15, 20, 0);
+                    windowPlane.rotation.y = side === 1 ? -Math.PI/2 : Math.PI/2;
+                    b.add(windowPlane);
+                    b.userData.windowMat = windowMat; // Para atualizar o tempo depois
+                    
                     this.scene.add(b);
-                    this.worldObjects.push({ mesh: b, type: 'building' });
+                    this.worldObjects.push({ mesh: b, type: 'building', windowMat: windowMat });
                 }
 
                 // 2. Renderiza os postes virados para a RUA com foco direcional (SpotLight)
@@ -1108,8 +1146,12 @@ export class GameEngine3D {
 
     _setupControls() {
         const move = (dir) => {
-            if(this.isIntro) return; // Trava controles na intro
+            if(this.isIntro) return;
+            const oldLane = this.currentLane;
             this.currentLane = Math.max(0, Math.min(2, this.currentLane + dir));
+            if (oldLane !== this.currentLane && this.audio) {
+                this.audio.playWhoosh();
+            }
         };
         document.addEventListener('keydown', (e) => {
             if(this.isIntro) return;
@@ -1600,6 +1642,10 @@ export class GameEngine3D {
                 this.particles.emit(side * 55 + (Math.random() - 0.5) * 10, Math.random() * 15, obj.mesh.position.z, 2);
             }
             
+            if (obj.windowMat) {
+                obj.windowMat.uniforms.uTime.value = this.time;
+            }
+            
             if (obj.mesh.position.z > 100) {
                 obj.mesh.position.z -= 720; 
             }
@@ -1930,9 +1976,8 @@ export class GameEngine3D {
         // Isso coloca a multidão exatamente NAS COSTAS do jogador.
         const offsetZ = 10 + (row * 6); 
         
-        // PROGRESSÃO EXPONENCIAL AINDA MAIS AGRESSIVA: A velocidade agora se multiplica
-        // Quanto mais aliados, mais brutal o ganho de velocidade (+25% de multiplicação cumulativa)
-        this.gameSpeed = this.gameSpeed * 1.25;
+        // PROGRESSÃO CONTROLADA: Aumenta a velocidade de forma justa e respeita o limite máximo
+        this.gameSpeed = Math.min(this.maxSpeed, this.gameSpeed + 3.0);
         
         // Limite de 5 pessoas seguindo o jogador, como solicitado
         if (this.playerCrowd.length < 5) {
@@ -1949,6 +1994,9 @@ export class GameEngine3D {
 
         this.entities.splice(i, 1);
         this._showFeedbackText(`+${earned} VOZES!`, "#ffcc00");
+        if (this.particles) {
+            this.particles.emit(e.mesh.position.x, 5, e.mesh.position.z, 30);
+        }
     }
 
     _handleHit(e, i) {
