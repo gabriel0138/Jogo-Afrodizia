@@ -3,7 +3,7 @@
 // ==========================================
 
 // Substitua pela URL da sua API no Vercel após o deploy
-const VERCEL_API_URL = '/api/ranking'; 
+const VERCEL_API_URL = 'ranking.php'; 
 
 export const CHAR_ICONS = {
     massau:   '🎤',

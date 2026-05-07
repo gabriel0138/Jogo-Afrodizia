@@ -3,337 +3,223 @@ import { GameEngine3D } from './engine_3d.js';
 import { saveScore, getTopScores, getPlayerProfile, renderRankingHTML, CHAR_ICONS, CHAR_NAMES } from './ranking.js';
 
 // ── DOM Elements ──────────────────────────────────────────
+const loadingScreen = document.getElementById('loading-screen');
+const loadingStatus = document.getElementById('loading-status');
+const progressBar = document.getElementById('main-progress-bar');
 const registerScreen = document.getElementById('register-screen');
-const startScreen    = document.getElementById('start-screen');
-const endScreen      = document.getElementById('end-screen');
-const rankingScreen  = document.getElementById('ranking-screen');
-const uiContainer    = document.getElementById('ui-container');
-const gameContainer  = document.getElementById('game-container');
-const scoreDisplay   = document.getElementById('scoreDisplay');
-const finalScoreEl   = document.getElementById('final-score');
-const totalVozesEl   = document.getElementById('total-vozes-display');
-const btnStart       = document.getElementById('btn-start');
-const btnRestart     = document.getElementById('btn-restart');
-const btnRegister     = document.getElementById('btn-register');
-const btnSkipRegister = document.getElementById('btn-skip-register');
-const inputName       = document.getElementById('input-name');
-const inputInstagram  = document.getElementById('input-instagram');
-const registerError   = document.getElementById('register-error');
+const startScreen = document.getElementById('start-screen');
+const endScreen = document.getElementById('end-screen');
+const rankingScreen = document.getElementById('ranking-screen');
+const uiContainer = document.getElementById('ui-container');
+const gameContainer = document.getElementById('game-container');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const finalScoreEl = document.getElementById('final-score');
+const totalVozesEl = document.getElementById('total-vozes-display');
 
-// ── Ranking Elements ──────────────────────────────────────
-const btnOpenRanking    = document.getElementById('btn-open-ranking');
-const btnOpenRankingEnd = document.getElementById('btn-open-ranking-end');
-const btnCloseRanking   = document.getElementById('btn-close-ranking');
-const rankingList       = document.getElementById('ranking-list');
-const rankingFullList   = document.getElementById('ranking-full-list');
-
-// ── Estado do Jogador ─────────────────────────────────────
-let playerName      = localStorage.getItem('afrodiziaName') || '';
+// ── Estado ────────────────────────────────────────────────
+let playerName = localStorage.getItem('afrodiziaName') || '';
 let playerInstagram = localStorage.getItem('afrodiziaInstagram') || '';
-let totalVozes      = parseInt(localStorage.getItem('afrodiziaTotalVozes')) || 0;
-let unlockedChars   = ['massau'];
-
-try {
-    const saved = localStorage.getItem('afrodiziaUnlockedChars');
-    if (saved) {
-        unlockedChars = JSON.parse(saved);
-        if (!unlockedChars.includes('massau')) unlockedChars.unshift('massau');
-    }
-} catch(e) { console.warn("Erro ao carregar personagens", e); }
-
-// ── Estado do Jogo ────────────────────────────────────────
-let engine    = null;
-let audioSys  = null;
+let totalVozes = parseInt(localStorage.getItem('afrodiziaTotalVozes')) || 0;
+let unlockedChars = ['massau'];
+let engine = null;
+let audioSys = null;
 let isPlaying = false;
-let animId    = null;
-let lastTime  = 0;
-let firstRun  = true;
-
-const charSkills = {
-    massau:   "MEGAFONE PLUS: 10 segundos de invencibilidade e pontos em dobro.",
-    tony:     "A VOZ DO POVO: Ganha +8% de bonus na coleta por aliado na multidao.",
-    priscilla:"MAQUINA DE COMBATE: Jaqueta magnetica que atrai Vozes proximas.",
-    morgado:  "RIFF DE RESGATE: A cada 8 segundos, emite um acorde potente que atrai aliados.",
-    sub:      "NOTAS FANTASMA: Fica intangivel periodicamente, atravessando obstaculos."
-};
+let animId = null;
 
 // ═══════════════════════════════════════════════════════════
-// REGISTRO
+// SISTEMA DE CARREGAMENTO (PRE-LOADER)
+// ═══════════════════════════════════════════════════════════
+
+async function init() {
+    try {
+        updateLoading(10, "INICIALIZANDO ENGINE...");
+        engine = new GameEngine3D(gameContainer, null);
+        
+        updateLoading(30, "CARREGANDO SONS...");
+        audioSys = new AudioSystem('bg-music');
+        
+        // SINCRONIZAÇÃO: Quando a música acabar, acaba o jogo!
+        audioSys.onEnded = () => {
+            console.log("[Audio] Trilha sonora finalizada.");
+            if (isPlaying) endGame(engine ? engine.score : 0);
+        };
+        
+        updateLoading(50, "PREPARANDO LÍDERES...");
+        await preloadAssets();
+        
+        updateLoading(80, "SINCRONIZANDO RANKING...");
+        if (playerInstagram) {
+            const profile = await getPlayerProfile(playerInstagram);
+            if (profile) {
+                totalVozes = parseInt(profile.totalVozes) || totalVozes;
+                unlockedChars = profile.unlocked_chars || unlockedChars;
+            }
+        }
+
+        updateLoading(100, "PRONTO!");
+        setTimeout(showNextScreen, 500);
+
+    } catch (err) {
+        console.error("Erro na inicialização:", err);
+        loadingStatus.innerText = "ERRO AO CARREGAR. VERIFIQUE SUA CONEXÃO.";
+        loadingStatus.style.color = "#ff4444";
+    }
+}
+
+function updateLoading(percent, status) {
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (loadingStatus) loadingStatus.innerText = status;
+}
+
+async function preloadAssets() {
+    const assets = [
+        'assets/img/afrodizia.png',
+        'assets/img/marcal_run_1.png',
+        'assets/img/tony_run_1.png',
+        'assets/img/priscilla_run_1.png',
+        'assets/img/morgado_run_1.png'
+    ];
+    
+    let loadedCount = 0;
+    const promises = assets.map(src => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = src;
+            img.onload = () => { loadedCount++; resolve(); };
+            img.onerror = () => { console.warn(`Falha ao carregar asset: ${src}`); resolve(); };
+        });
+    });
+
+    await Promise.all(promises);
+    processAvatars(); // Processa chroma key após carregar
+}
+
+function showNextScreen() {
+    loadingScreen.style.display = 'none';
+    if (playerName) {
+        startScreen.style.display = 'flex';
+        updateUI();
+    } else {
+        registerScreen.style.display = 'flex';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// REGISTRO E UI
 // ═══════════════════════════════════════════════════════════
 
 async function submitRegister(skip = false) {
-    registerError.innerText = '';
-    
-    if (!skip) {
-        const name  = inputName.value.trim();
-        const insta = inputInstagram.value.trim().replace(/^@/, '').toLowerCase();
-        if (!name) { registerError.innerText = 'Insira seu nome.'; return; }
-        if (!insta) { registerError.innerText = 'Insira seu @Instagram.'; return; }
-        
-        btnRegister.disabled = true;
-        btnRegister.innerText = 'Sincronizando...';
+    const nameInput = document.getElementById('input-name');
+    const instaInput = document.getElementById('input-instagram');
+    const errorEl = document.getElementById('register-error');
 
-        // Sincroniza com o servidor se já existir conta
-        const profile = await getPlayerProfile(insta);
-        if (profile) {
-            playerName = profile.name || name;
-            playerInstagram = insta;
-            totalVozes = profile.totalVozes || 0;
-            localStorage.setItem('afrodiziaName', playerName);
-            localStorage.setItem('afrodiziaInstagram', insta);
-            console.log(`[Sync] Perfil recuperado: ${totalVozes} vozes.`);
-        } else {
-            playerName = name;
-            playerInstagram = insta;
+    if (!skip) {
+        const name = nameInput.value.trim();
+        const insta = instaInput.value.trim().replace(/^@/, '').toLowerCase();
+        
+        if (!name || !insta) {
+            errorEl.innerText = "Preencha todos os campos.";
+            return;
         }
 
-        localStorage.setItem('afrodiziaName', playerName);
-        localStorage.setItem('afrodiziaInstagram', playerInstagram);
-        btnRegister.disabled = false;
-        btnRegister.innerText = 'ENTRAR NA MARCHA →';
+        playerName = name;
+        playerInstagram = insta;
+        localStorage.setItem('afrodiziaName', name);
+        localStorage.setItem('afrodiziaInstagram', insta);
     } else {
-        playerName = 'Anonimo';
-        playerInstagram = '';
+        playerName = "Visitante";
+        playerInstagram = "";
     }
-    
+
     registerScreen.style.display = 'none';
-    startScreen.style.display    = 'flex';
+    startScreen.style.display = 'flex';
     updateUI();
 }
 
-btnRegister?.addEventListener('click', () => submitRegister(false));
-btnSkipRegister?.addEventListener('click', () => submitRegister(true));
-
-if (playerName) {
-    registerScreen.style.display = 'none';
-    startScreen.style.display    = 'flex';
-}
-
-// ═══════════════════════════════════════════════════════════
-// UI DO MENU
-// ═══════════════════════════════════════════════════════════
-
 function updateUI() {
-    const vozesSafe = parseInt(totalVozes) || 0;
-    if (totalVozesEl) totalVozesEl.innerText = vozesSafe.toLocaleString('pt-BR');
+    if (totalVozesEl) totalVozesEl.innerText = totalVozes.toLocaleString('pt-BR');
     
     document.querySelectorAll('.char-btn').forEach(btn => {
         const charId = btn.dataset.char;
-        const cost   = parseInt(btn.dataset.cost);
-        const lbl    = btn.querySelector('.char-cost');
-
+        const cost = parseInt(btn.dataset.cost);
         if (unlockedChars.includes(charId)) {
             btn.classList.remove('locked');
-            if (lbl) { lbl.innerText = 'DISPONÍVEL'; lbl.style.color = '#00ffcc'; }
         } else {
             btn.classList.add('locked');
-            if (lbl) lbl.innerText = `🔒 ${cost}`;
         }
     });
 }
 
-/**
- * Inicializa a seleção de personagens com delegação de eventos.
- * Resolve bugs de múltiplos cliques e melhora a responsividade.
- */
-function initCharacterSelection() {
-    const container = document.querySelector('.char-options');
-    if (!container) return;
-
-    container.addEventListener('click', (e) => {
-        const btn = e.target.closest('.char-btn');
-        if (!btn) return;
-
-        const charId = btn.dataset.char;
-        const cost   = parseInt(btn.dataset.cost);
-        const descEl = document.getElementById('char-description');
-
-        // Sempre atualiza a descrição da habilidade
-        if (descEl) {
-            descEl.classList.remove('pulse-once');
-            void descEl.offsetWidth; // Force reflow
-            descEl.innerHTML = `⚡ ${charSkills[charId] || "???"}`;
-            descEl.classList.add('pulse-once');
-        }
-
-        if (unlockedChars.includes(charId)) {
-            // Selecionar personagem já desbloqueado
-            document.querySelectorAll('.char-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            
-            // Som de feedback se existir
-            if (audioSys && audioSys.playTap) audioSys.playTap();
-            
-            console.log(`Personagem selecionado: ${charId}`);
-        } else {
-            // Tentar desbloquear
-            if (totalVozes >= cost) {
-                totalVozes -= cost;
-                unlockedChars.push(charId);
-                
-                localStorage.setItem('afrodiziaTotalVozes', totalVozes);
-                localStorage.setItem('afrodiziaUnlockedChars', JSON.stringify(unlockedChars));
-                
-                updateUI();
-                
-                // Seleciona automaticamente após a compra
-                document.querySelectorAll('.char-btn').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                
-                if (audioSys && audioSys.playUnlock) audioSys.playUnlock();
-            } else {
-                // Feedback de saldo insuficiente
-                const lbl = btn.querySelector('.char-cost');
-                if (lbl) {
-                    const originalText = lbl.innerText;
-                    lbl.innerText = 'SALDO INSUFICIENTE';
-                    lbl.style.color = '#ff4444';
-                    setTimeout(() => {
-                        lbl.innerText = originalText;
-                        lbl.style.color = '';
-                    }, 1500);
-                }
-            }
-        }
-    });
-}
+// Event Listeners
+document.getElementById('btn-register')?.addEventListener('click', () => submitRegister(false));
+document.getElementById('btn-skip-register')?.addEventListener('click', () => submitRegister(true));
+document.getElementById('btn-start')?.addEventListener('click', startGame);
+document.getElementById('btn-restart')?.addEventListener('click', () => {
+    endScreen.style.display = 'none';
+    startScreen.style.display = 'flex';
+});
 
 // ═══════════════════════════════════════════════════════════
-// JOGO
+// LOOP DO JOGO
 // ═══════════════════════════════════════════════════════════
 
 function startGame() {
     startScreen.style.display = 'none';
-    endScreen.style.display   = 'none';
     uiContainer.style.display = 'block';
-    if (!audioSys) audioSys = new AudioSystem('bg-music');
-    audioSys.play();
-
-    if (!engine) {
-        engine = new GameEngine3D(gameContainer, audioSys);
-    } else {
-        engine.audio = audioSys;
+    
+    if (audioSys) {
+        audioSys.audioElement.currentTime = 0; // Começa do início
+        audioSys.play();
     }
     
     const selBtn = document.querySelector('.char-btn.selected');
-    if (selBtn) engine.setPlayerCharacter(selBtn.dataset.char);
-
+    const charId = selBtn ? selBtn.dataset.char : 'massau';
+    
+    engine.setPlayerCharacter(charId);
     engine.onScoreUpdate = (s) => { scoreDisplay.innerText = s; };
-    engine.onGameOver = (score) => endGame(score);
-
+    engine.onGameOver = endGame;
+    
     isPlaying = true;
-
-    // Inicia a cinemática se for a primeira vez
-    if (firstRun && engine && engine.isReady) {
-        engine.startCinematic();
-        firstRun = false;
-    }
-
-    lastTime = performance.now();
-    animId = requestAnimationFrame(gameLoop);
-
-    // DEBUG: Atalho para encerrar fase (Tecla 'K')
-    const debugHandler = (e) => {
-        if (isPlaying && e.key.toLowerCase() === 'k') {
-            console.log("Debug: Encerrando fase via atalho...");
-            endGame(engine ? engine.score : 0);
-            window.removeEventListener('keydown', debugHandler);
-        }
-    };
-    window.addEventListener('keydown', debugHandler);
+    requestAnimationFrame(gameLoop);
 }
 
 function gameLoop(currentTime) {
     if (!isPlaying) return;
-    const dt = Math.min(0.1, (currentTime - lastTime) / 1000);
-    lastTime = currentTime;
-    if (engine) engine.update(dt);
-    animId = requestAnimationFrame(gameLoop);
+    engine.update(0.016); // ~60fps fixed step para estabilidade
+    requestAnimationFrame(gameLoop);
 }
 
 async function endGame(score) {
     isPlaying = false;
-    if (animId) cancelAnimationFrame(animId);
     uiContainer.style.display = 'none';
-    endScreen.style.display   = 'flex';
-
-    const charId = (engine && engine.selectedChar) ? engine.selectedChar : 'massau';
-    const charIcon = CHAR_ICONS[charId] || '🎵';
-
-    const scoreSafe = parseInt(score) || 0;
-    if (finalScoreEl) finalScoreEl.innerText = scoreSafe.toLocaleString('pt-BR');
+    endScreen.style.display = 'flex';
+    finalScoreEl.innerText = score.toLocaleString('pt-BR');
     
-    const charIconEl = document.getElementById('result-char-icon');
-    if (charIconEl) charIconEl.innerText = charIcon;
-    
-    const playerNameEl = document.getElementById('result-player-name');
-    if (playerNameEl) playerNameEl.innerText = playerName || 'Jogador';
-    
-    const playerInstaEl = document.getElementById('result-player-insta');
-    if (playerInstaEl) playerInstaEl.innerText = playerInstagram ? `@${playerInstagram}` : '';
-
-    totalVozes += scoreSafe;
+    totalVozes += score;
     localStorage.setItem('afrodiziaTotalVozes', totalVozes);
-    updateUI();
 
     const badgeEl = document.getElementById('result-rank-badge');
-    if (playerInstagram && scoreSafe > 0) {
-        if (badgeEl) badgeEl.innerText = 'Salvando no Ranking...';
-        const result = await saveScore({ 
-            name: playerName, 
-            instagram: playerInstagram, 
-            character: charId, 
-            score: scoreSafe,
-            totalVozes: totalVozes
+    if (playerInstagram && score > 0) {
+        badgeEl.innerText = "SINCRONIZANDO...";
+        const res = await saveScore({
+            name: playerName,
+            instagram: playerInstagram,
+            character: engine.selectedChar,
+            score: score,
+            totalVozes: totalVozes,
+            unlockedChars: unlockedChars
         });
-        
-        if (result) {
-            if (badgeEl) badgeEl.innerText = `Voce ficou em #${result.rank} no ranking mundial!`;
-            if (result.totalVozes) {
-                totalVozes = result.totalVozes;
-                localStorage.setItem('afrodiziaTotalVozes', totalVozes);
-                updateUI();
-            }
-        }
+        if (res) badgeEl.innerText = `POSIÇÃO NO RANKING: #${res.rank}`;
     }
-    loadRanking(rankingList, 8);
+    
+    loadRanking(document.getElementById('ranking-list'), 5);
 }
 
-btnStart?.addEventListener('click', startGame);
-
-btnRestart?.addEventListener('click', () => {
-    // Retorna a tela principal para trocar de personagem ou ver ranking
-    endScreen.style.display = 'none';
-    startScreen.style.display = 'flex';
-    updateUI();
-});
-
-// ═══════════════════════════════════════════════════════════
-// RANKING & CHROMA KEY & CERTIFICADO
-// ═══════════════════════════════════════════════════════════
-
-async function loadRanking(container, limit = 20) {
-    if (!container) return;
-    container.innerHTML = '<div class="ranking-loading">Carregando ranking global...</div>';
-    try {
-        const scores = await getTopScores(limit);
-        if (!scores || scores.length === 0) {
-            container.innerHTML = '<div class="ranking-empty">Nenhuma voz registrada ainda. Seja o primeiro! ✊🏿</div>';
-            return;
-        }
-        container.innerHTML = renderRankingHTML(scores, playerInstagram);
-    } catch (err) {
-        console.error("Erro ao carregar ranking:", err);
-        container.innerHTML = '<div class="ranking-error">Erro ao conectar com o ranking. Verifique sua internet.</div>';
-    }
-}
-
+// Auxiliares (Avatar Chroma Key)
 function processAvatars() {
     document.querySelectorAll('.char-avatar[data-src]').forEach(avatar => {
-        const src = avatar.dataset.src;
-        const chroma = avatar.dataset.chroma;
         const img = new Image();
-        img.src = src;
+        img.src = avatar.dataset.src;
         img.onload = () => {
             const canvas = document.createElement('canvas');
             canvas.width = img.width; canvas.height = img.height;
@@ -342,9 +228,7 @@ function processAvatars() {
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imgData.data;
             for (let i = 0; i < data.length; i += 4) {
-                const r = data[i], g = data[i+1], b = data[i+2];
-                if (chroma === 'green' && g > r * 1.2 && g > b * 1.2) data[i+3] = 0;
-                else if (chroma === 'blue' && b > r * 1.2 && b > g * 1.2) data[i+3] = 0;
+                if (data[i+1] > 100 && data[i+1] > data[i] * 1.5) data[i+3] = 0; // Green screen simples
             }
             ctx.putImageData(imgData, 0, 0);
             avatar.style.backgroundImage = `url('${canvas.toDataURL()}')`;
@@ -352,48 +236,11 @@ function processAvatars() {
     });
 }
 
-function downloadCertificate() {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 1920; canvas.height = 1080;
-    const w = 1920, h = 1080;
-    const charId = engine ? engine.selectedChar : 'massau';
-    const score = document.getElementById('final-score').innerText || '0';
-
-    ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 20; ctx.strokeRect(40, 40, w-80, h-80);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#ffcc00';
-    ctx.font = '900 80px sans-serif'; ctx.fillText('CERTIFICADO EMBAIXADOR ANTI-RACISTA', w/2, 250);
-    ctx.fillStyle = '#fff'; ctx.font = '400 50px sans-serif';
-    ctx.fillText(playerName.toUpperCase(), w/2, 450);
-    ctx.fillText(`Marchou com ${CHAR_NAMES[charId]} e reuniu ${score} vozes.`, w/2, 600);
-    
-    const link = document.createElement('a');
-    link.download = `Certificado_Afrodizia.png`;
-    link.href = canvas.toDataURL();
-    link.click();
+async function loadRanking(container, limit) {
+    if (!container) return;
+    const scores = await getTopScores(limit);
+    container.innerHTML = renderRankingHTML(scores, playerInstagram);
 }
 
-document.getElementById('btn-certificate')?.addEventListener('click', downloadCertificate);
-
-processAvatars();
-
-// Listeners para abrir/fechar o ranking
-btnOpenRanking?.addEventListener('click', () => {
-    rankingScreen.style.display = 'flex';
-    loadRanking(rankingFullList, 30);
-});
-
-btnOpenRankingEnd?.addEventListener('click', () => {
-    rankingScreen.style.display = 'flex';
-    loadRanking(rankingFullList, 30);
-});
-
-btnCloseRanking?.addEventListener('click', () => {
-    rankingScreen.style.display = 'none';
-});
-initCharacterSelection();
-updateUI();
-
-// Inicializa a engine
-engine = new GameEngine3D(gameContainer, null);
+// Iniciar tudo
+init();
