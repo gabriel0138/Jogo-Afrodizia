@@ -312,9 +312,19 @@ btnRestart?.addEventListener('click', () => {
 // ═══════════════════════════════════════════════════════════
 
 async function loadRanking(container, limit = 20) {
-    container.innerHTML = 'Carregando...';
-    const scores = await getTopScores(limit);
-    container.innerHTML = renderRankingHTML(scores, playerInstagram);
+    if (!container) return;
+    container.innerHTML = '<div class="ranking-loading">Carregando ranking global...</div>';
+    try {
+        const scores = await getTopScores(limit);
+        if (!scores || scores.length === 0) {
+            container.innerHTML = '<div class="ranking-empty">Nenhuma voz registrada ainda. Seja o primeiro! ✊🏿</div>';
+            return;
+        }
+        container.innerHTML = renderRankingHTML(scores, playerInstagram);
+    } catch (err) {
+        console.error("Erro ao carregar ranking:", err);
+        container.innerHTML = '<div class="ranking-error">Erro ao conectar com o ranking. Verifique sua internet.</div>';
+    }
 }
 
 function processAvatars() {
@@ -366,6 +376,21 @@ function downloadCertificate() {
 document.getElementById('btn-certificate')?.addEventListener('click', downloadCertificate);
 
 processAvatars();
+
+// Listeners para abrir/fechar o ranking
+btnOpenRanking?.addEventListener('click', () => {
+    rankingScreen.style.display = 'flex';
+    loadRanking(rankingFullList, 30);
+});
+
+btnOpenRankingEnd?.addEventListener('click', () => {
+    rankingScreen.style.display = 'flex';
+    loadRanking(rankingFullList, 30);
+});
+
+btnCloseRanking?.addEventListener('click', () => {
+    rankingScreen.style.display = 'none';
+});
 initCharacterSelection();
 updateUI();
 
