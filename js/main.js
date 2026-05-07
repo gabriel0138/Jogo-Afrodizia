@@ -21,6 +21,7 @@ let playerName = localStorage.getItem('afrodiziaName') || '';
 let playerInstagram = localStorage.getItem('afrodiziaInstagram') || '';
 let totalVozes = parseInt(localStorage.getItem('afrodiziaTotalVozes')) || 0;
 let unlockedChars = ['massau'];
+let lastSelectedChar = localStorage.getItem('afrodiziaLastChar') || 'massau';
 let engine = null;
 let audioSys = null;
 let isPlaying = false;
@@ -141,14 +142,48 @@ function updateUI() {
     
     document.querySelectorAll('.char-btn').forEach(btn => {
         const charId = btn.dataset.char;
-        const cost = parseInt(btn.dataset.cost);
+        const cost = parseInt(btn.dataset.cost || 0);
+        
+        // 1. Gerencia bloqueio
         if (unlockedChars.includes(charId)) {
             btn.classList.remove('locked');
         } else {
             btn.classList.add('locked');
         }
+
+        // 2. Gerencia seleção visual
+        if (charId === lastSelectedChar) {
+            btn.classList.add('selected');
+        } else {
+            btn.classList.remove('selected');
+        }
     });
 }
+
+// Lógica de Seleção / Compra
+document.querySelector('.char-options')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.char-btn');
+    if (!btn) return;
+
+    const charId = btn.dataset.char;
+    const cost = parseInt(btn.dataset.cost || 0);
+
+    if (unlockedChars.includes(charId)) {
+        // Selecionar
+        lastSelectedChar = charId;
+        localStorage.setItem('afrodiziaLastChar', charId);
+        updateUI();
+    } else if (totalVozes >= cost) {
+        // Comprar
+        totalVozes -= cost;
+        unlockedChars.push(charId);
+        lastSelectedChar = charId;
+        localStorage.setItem('afrodiziaTotalVozes', totalVozes);
+        localStorage.setItem('afrodiziaUnlockedChars', JSON.stringify(unlockedChars));
+        localStorage.setItem('afrodiziaLastChar', charId);
+        updateUI();
+    }
+});
 
 // Event Listeners
 document.getElementById('btn-register')?.addEventListener('click', () => submitRegister(false));
@@ -157,6 +192,16 @@ document.getElementById('btn-start')?.addEventListener('click', startGame);
 document.getElementById('btn-restart')?.addEventListener('click', () => {
     endScreen.style.display = 'none';
     startScreen.style.display = 'flex';
+    updateUI();
+});
+
+// Correção de Áudio ao sair/voltar da aba
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        if (audioSys && isPlaying) audioSys.audioElement.pause();
+    } else {
+        if (audioSys && isPlaying) audioSys.play(); // Play já faz o resume do contexto
+    }
 });
 
 // ═══════════════════════════════════════════════════════════
