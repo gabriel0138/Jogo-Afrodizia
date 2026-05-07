@@ -28,8 +28,8 @@ const rankingList       = document.getElementById('ranking-list');
 const rankingFullList   = document.getElementById('ranking-full-list');
 
 // ── Estado do Jogador ─────────────────────────────────────
-let playerName      = sessionStorage.getItem('afrodiziaName') || '';
-let playerInstagram = sessionStorage.getItem('afrodiziaInstagram') || '';
+let playerName      = localStorage.getItem('afrodiziaName') || '';
+let playerInstagram = localStorage.getItem('afrodiziaInstagram') || '';
 let totalVozes      = parseInt(localStorage.getItem('afrodiziaTotalVozes')) || 0;
 let unlockedChars   = ['massau'];
 
@@ -79,15 +79,16 @@ async function submitRegister(skip = false) {
             playerName = profile.name || name;
             playerInstagram = insta;
             totalVozes = profile.totalVozes || 0;
-            localStorage.setItem('afrodiziaTotalVozes', totalVozes);
+            localStorage.setItem('afrodiziaName', playerName);
+            localStorage.setItem('afrodiziaInstagram', insta);
             console.log(`[Sync] Perfil recuperado: ${totalVozes} vozes.`);
         } else {
             playerName = name;
             playerInstagram = insta;
         }
 
-        sessionStorage.setItem('afrodiziaName', playerName);
-        sessionStorage.setItem('afrodiziaInstagram', playerInstagram);
+        localStorage.setItem('afrodiziaName', playerName);
+        localStorage.setItem('afrodiziaInstagram', playerInstagram);
         btnRegister.disabled = false;
         btnRegister.innerText = 'ENTRAR NA MARCHA →';
     } else {
