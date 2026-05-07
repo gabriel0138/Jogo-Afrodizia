@@ -197,6 +197,9 @@ document.querySelector('.char-options')?.addEventListener('click', (e) => {
         updateUI();
     } else {
         if (descEl) descEl.innerText = `Necessário ${cost} vozes para desbloquear ${CHAR_NAMES[charId]}.`;
+        // Efeito visual de erro
+        btn.classList.add('shake');
+        setTimeout(() => btn.classList.remove('shake'), 400);
     }
 });
 
@@ -316,7 +319,11 @@ function processAvatars() {
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imgData.data;
             for (let i = 0; i < data.length; i += 4) {
-                if (data[i+1] > 100 && data[i+1] > data[i] * 1.5) data[i+3] = 0; // Green screen simples
+                const r = data[i], g = data[i+1], b = data[i+2];
+                // Remove VERDE
+                if (g > 100 && g > r * 1.4 && g > b * 1.4) data[i+3] = 0;
+                // Remove AZUL (Para o Tony)
+                if (b > 100 && b > r * 1.4 && b > g * 1.4) data[i+3] = 0;
             }
             ctx.putImageData(imgData, 0, 0);
             avatar.style.backgroundImage = `url('${canvas.toDataURL()}')`;

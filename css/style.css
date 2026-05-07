@@ -586,11 +586,10 @@ p {
 @media (min-width: 480px) {
     .content-box { padding: 24px 24px 28px; }
     .char-options {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-    gap: 10px;
-    width: 100%;
-}
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 12px;
+    }
     .char-avatar, .locked-avatar { width: 56px; height: 56px; }
     .char-btn span { font-size: 0.72rem; }
     h2 { letter-spacing: 3px; }
@@ -695,4 +694,15 @@ p {
 }
 .score-pulse {
     animation: score-pulse 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Feedback para personagens bloqueados */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+.shake {
+    animation: shake 0.2s ease-in-out 0s 2;
+    border-color: #ff4444 !important;
 }
