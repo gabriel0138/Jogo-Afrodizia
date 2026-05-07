@@ -39,11 +39,11 @@ async function init() {
         
         updateUI(); 
 
-        updateLoading(10, "INICIALIZANDO ENGINE...");
-        engine = new GameEngine3D(gameContainer, null);
-        
-        updateLoading(30, "CARREGANDO SONS...");
+        updateLoading(10, "INICIALIZANDO AUDIO...");
         audioSys = new AudioSystem('bg-music');
+        
+        updateLoading(20, "INICIALIZANDO ENGINE...");
+        engine = new GameEngine3D(gameContainer, audioSys);
         
         audioSys.onEnded = () => {
             console.log("[Audio] Trilha sonora finalizada.");
@@ -178,21 +178,25 @@ document.querySelector('.char-options')?.addEventListener('click', (e) => {
 
     const charId = btn.dataset.char;
     const cost = parseInt(btn.dataset.cost || 0);
+    const descEl = document.getElementById('char-description');
 
     if (unlockedChars.includes(charId)) {
-        // Selecionar
         lastSelectedChar = charId;
         localStorage.setItem('afrodiziaLastChar', charId);
+        if (audioSys) audioSys.playWhoosh();
+        if (descEl) descEl.innerText = "Líder Selecionado: " + CHAR_NAMES[charId];
         updateUI();
     } else if (totalVozes >= cost) {
-        // Comprar
         totalVozes -= cost;
         unlockedChars.push(charId);
         lastSelectedChar = charId;
         localStorage.setItem('afrodiziaTotalVozes', totalVozes);
         localStorage.setItem('afrodiziaUnlockedChars', JSON.stringify(unlockedChars));
         localStorage.setItem('afrodiziaLastChar', charId);
+        if (audioSys) audioSys.playJump();
         updateUI();
+    } else {
+        if (descEl) descEl.innerText = `Necessário ${cost} vozes para desbloquear ${CHAR_NAMES[charId]}.`;
     }
 });
 
@@ -206,12 +210,24 @@ document.getElementById('btn-restart')?.addEventListener('click', () => {
     updateUI();
 });
 
+// RANKING LISTENERS (Restaurados)
+document.getElementById('btn-open-ranking')?.addEventListener('click', () => {
+    rankingScreen.style.display = 'flex';
+    loadRanking(document.getElementById('ranking-full-list'), 50);
+});
+document.getElementById('btn-close-ranking')?.addEventListener('click', () => {
+    rankingScreen.style.display = 'none';
+});
+document.getElementById('btn-certificate')?.addEventListener('click', () => {
+    window.open(`certificate.html?name=${encodeURIComponent(playerName)}&score=${finalScoreEl.innerText}`, '_blank');
+});
+
 // Correção de Áudio ao sair/voltar da aba
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         if (audioSys && isPlaying) audioSys.audioElement.pause();
     } else {
-        if (audioSys && isPlaying) audioSys.play(); // Play já faz o resume do contexto
+        if (audioSys && isPlaying) audioSys.play();
     }
 });
 
@@ -224,7 +240,7 @@ function startGame() {
     uiContainer.style.display = 'block';
     
     if (audioSys) {
-        audioSys.audioElement.currentTime = 0; // Começa do início
+        audioSys.audioElement.currentTime = 0;
         audioSys.play();
     }
     
@@ -235,18 +251,29 @@ function startGame() {
     engine.onScoreUpdate = (s) => { 
         scoreDisplay.innerText = s; 
         scoreDisplay.parentElement.classList.remove('score-pulse');
-        void scoreDisplay.parentElement.offsetWidth; // Force reflow
+        void scoreDisplay.parentElement.offsetWidth;
         scoreDisplay.parentElement.classList.add('score-pulse');
     };
     engine.onGameOver = endGame;
     
+    // RESTAURAÇÃO: Inicia a cinematica antes do gameplay real
+    engine.startCinematic();
+    
     isPlaying = true;
+    lastTime = performance.now(); // Reset do tempo para velocidade justa
     requestAnimationFrame(gameLoop);
 }
 
+let lastTime = 0;
 function gameLoop(currentTime) {
     if (!isPlaying) return;
-    engine.update(0.016); // ~60fps fixed step para estabilidade
+    
+    const dt = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+    
+    // Limita o DT para evitar pulos em lags (máximo 0.1s)
+    engine.update(Math.min(dt, 0.1)); 
+    
     requestAnimationFrame(gameLoop);
 }
 

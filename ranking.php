@@ -33,7 +33,7 @@ try {
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
-        PDO::ATTR_PERSISTENT         => true // Performance: mantém conexão viva
+        PDO::ATTR_PERSISTENT         => false // Desativado para compatibilidade total Locaweb
     ];
     $pdo = new PDO($dsn, $db_config['user'], $db_config['pass'], $options);
 } catch (PDOException $e) {

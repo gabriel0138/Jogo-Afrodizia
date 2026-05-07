@@ -1172,10 +1172,10 @@ export class GameEngine3D {
     }
 
     startCinematic() {
-        this.isIntro = true;
-        this.introTimer = 0;
-        this.introStep = 0;
+        console.log("[Engine] Iniciando Cinemática...");
         this.isReady = true;
+        this.isIntro = true;
+        this.introTimer = 0; // Garante que comece do zero
         
         // Reseta o player para o centro, posicionado mais à frente para a câmera
         this.currentLane = 1;
