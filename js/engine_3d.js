@@ -1267,11 +1267,10 @@ export class GameEngine3D {
                 if (this.audio && this.audio.playImpactThunder) this.audio.playImpactThunder();
 
                 // ATO 1: "A revolucao..."
-                this._setCinText(textEl, 'A revolu\u00e7\u00e3o...', 'cin-in', 'var(--primary)', {
-                    fontSize: 'clamp(1.6rem, 5.5vw, 2.8rem)',
+                console.log("[Cinematic] ATO 1: A revolução...");
+                this._setCinText(textEl, 'A REVOLU\u00c7\u00c3O...', 'cin-in', 'var(--primary)', {
                     fontWeight: '900',
-                    letterSpacing: '2px',
-                    textShadow: '0 0 25px rgba(255,204,0,0.6), 0 2px 8px rgba(0,0,0,0.9)',
+                    letterSpacing: '4px'
                 });
 
                 this.introStep = 1;
@@ -1294,13 +1293,12 @@ export class GameEngine3D {
             // ATO 2: "...comecou." — impacto de palavra
             if (T > 1.8 && this.introStep === 1) {
                 this.introStep = 2;
+                console.log("[Cinematic] ATO 2: ...começou.");
                 this._hideCinText(textEl);
                 setTimeout(() => {
-                    this._setCinText(textEl, '...come\u00e7ou.', 'cin-impact', '#ffffff', {
-                        fontSize: 'clamp(2.2rem, 8vw, 4.5rem)',
+                    this._setCinText(textEl, '...COME\u00c7OU.', 'cin-impact', '#ffffff', {
                         fontWeight: '900',
-                        letterSpacing: '3px',
-                        textShadow: '0 0 40px rgba(255,255,255,0.9), 0 0 80px rgba(255,204,0,0.5), 0 2px 12px rgba(0,0,0,0.95)',
+                        letterSpacing: '5px'
                     });
                     setTimeout(() => textEl && textEl.classList.add('cin-pulse'), 600);
                 }, 600);
@@ -1309,14 +1307,12 @@ export class GameEngine3D {
             // ATO 3: "Cada voz resgatada"
             if (T > 4.0 && this.introStep === 2) {
                 this.introStep = 3;
+                console.log("[Cinematic] ATO 3: Cada voz resgatada");
                 if (textEl) textEl.classList.remove('cin-pulse');
                 this._hideCinText(textEl);
                 setTimeout(() => {
-                    this._setCinText(textEl, 'Cada voz resgatada', 'cin-slide', '#dddddd', {
-                        fontSize: 'clamp(1.1rem, 3.8vw, 2rem)',
-                        fontWeight: '700',
-                        letterSpacing: '1px',
-                        textShadow: '0 0 15px rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.9)',
+                    this._setCinText(textEl, 'CADA VOZ RESGATADA', 'cin-slide', '#dddddd', {
+                        fontWeight: '700'
                     });
                 }, 600);
             }
@@ -1324,13 +1320,11 @@ export class GameEngine3D {
             // ATO 4: "e um passo contra o racismo." — mensagem final dourada
             if (T > 6.2 && this.introStep === 3) {
                 this.introStep = 4;
+                console.log("[Cinematic] ATO 4: é um passo contra o racismo.");
                 this._hideCinText(textEl);
                 setTimeout(() => {
-                    this._setCinText(textEl, '\u00e9 um passo contra o racismo.', 'cin-slide', 'var(--primary)', {
-                        fontSize: 'clamp(1.1rem, 3.8vw, 2rem)',
-                        fontWeight: '900',
-                        letterSpacing: '1px',
-                        textShadow: '0 0 30px rgba(255,204,0,0.8), 0 0 60px rgba(255,150,0,0.3), 0 2px 8px rgba(0,0,0,0.95)',
+                    this._setCinText(textEl, '\u00c9 UM PASSO CONTRA O RACISMO.', 'cin-slide', 'var(--primary)', {
+                        fontWeight: '900'
                     });
                     setTimeout(() => textEl && textEl.classList.add('cin-pulse'), 700);
                 }, 500);
