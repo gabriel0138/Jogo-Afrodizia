@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#050508">
+    <title>Afrodizia - A Marcha</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Oswald:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/"
+        }
+    }
+    </script>
+    
+    <script>
+        window.onerror = function(msg, url, line) {
+            console.error("ERRO GLOBAL: " + msg + " em " + url + ":" + line);
+            const debug = document.createElement('div');
+            debug.style = "position:fixed;bottom:0;left:0;background:rgba(255,0,0,0.8);color:white;padding:10px;z-index:9999;font-size:10px;";
+            debug.innerText = "Erro: " + msg.substring(0, 50);
+            document.body.appendChild(debug);
+        };
+    </script>
+</head>
+<body>
+
+    <!-- TELA 0: CADASTRO DO JOGADOR -->
+    <div id="register-screen" class="screen">
+        <div class="content-box">
+            <img src="assets/img/afrodizia.png" alt="Afrodizia Logo" class="main-logo">
+            <h2>Racista não.. O Jogo</h2>
+
+            <div class="register-form">
+                <div class="form-group">
+                    <label for="input-name">Seu nome na marcha</label>
+                    <input type="text" id="input-name" maxlength="25" placeholder="Ex: Mauro Silva" autocomplete="name" autocorrect="off" autocapitalize="words" spellcheck="false" inputmode="text">
+                </div>
+                <div class="form-group">
+                    <label for="input-instagram">Seu @Instagram</label>
+                    <div class="input-insta-wrap">
+                        <span class="insta-at">@</span>
+                        <input type="text" id="input-instagram" maxlength="30" placeholder="seu.perfil" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" inputmode="url">
+                    </div>
+                    <span class="form-hint">Sera exibido no ranking mundial 🌎</span>
+                </div>
+                <div id="register-error" class="form-error"></div>
+                <button id="btn-register" class="btn-primary" style="margin-top: 15px; width: 100%;">
+                    ENTRAR NA MARCHA →
+                </button>
+            </div>
+            <button id="btn-skip-register" class="btn-secondary" style="margin-top: 10px;">
+                Jogar sem salvar ranking
+            </button>
+        </div>
+    </div>
+
+    <!-- TELA 1: SELECAO DE PERSONAGEM / INICIO -->
+    <div id="start-screen" class="screen" style="display:none;">
+        <div class="content-box">
+            <img src="assets/img/afrodizia.png" alt="Afrodizia Logo" class="main-logo">
+            <h2>Racistas Não.. O Jogo</h2>
+            
+            <div class="player-stats">
+                <span class="icon">✊🏿</span> Vozes Acumuladas: <strong id="total-vozes-display">0</strong>
+            </div>
+
+            <div class="character-select">
+                <h3>ESCOLHA SEU LIDER</h3>
+                <div class="char-options">
+                    <button class="char-btn selected" data-char="massau" data-cost="0">
+                        <div class="char-avatar" id="avatar-massau" data-src="assets/img/marcal_run_1.png" data-chroma="green"></div>
+                        <span>Massau</span>
+                    </button>
+                    <button class="char-btn locked" data-char="tony" data-cost="1000">
+                        <div class="char-avatar" id="avatar-tony" data-src="assets/img/tony_run_1.png" data-chroma="blue"></div>
+                        <span>Tony</span>
+                        <span class="char-cost"></span>
+                    </button>
+                    <button class="char-btn locked char-btn-priscilla" data-char="priscilla" data-cost="2000">
+                        <div class="char-avatar" id="avatar-priscilla" data-src="assets/img/priscilla_run_1.png" data-chroma="green"></div>
+                        <span>Priscilla</span>
+                        <span class="char-cost"></span>
+                    </button>
+                    <button class="char-btn locked" data-char="morgado" data-cost="2500">
+                        <div class="char-avatar" id="avatar-morgado" data-src="assets/img/morgado_run_1.png" data-chroma="green"></div>
+                        <span>Morgado</span>
+                        <span class="char-cost"></span>
+                    </button>
+                    <button class="char-btn locked" data-char="sub" data-cost="1500">
+                        <div class="char-avatar" id="avatar-sub" data-src="assets/img/sub_avatar.png" data-chroma="green"></div>
+                        <span>Sub</span>
+                        <span class="char-cost"></span>
+                    </button>
+
+                </div>
+                <div id="char-description">
+                    Habilidade: Carregando...
+                </div>
+            </div>
+
+            <div class="instructions">
+                <span>[Swipe / Setas]</span> Mover | <span>[Swipe ↑ / Espaço]</span> Pular
+            </div>
+
+            <div id="loading-container" style="margin-top: 20px;">
+                <div style="font-size: 10px; color: #aaa; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">Sincronizando Marcha...</div>
+                <div style="width: 100%; height: 6px; background: #111; border-radius: 3px; overflow: hidden; border: 1px solid #333;">
+                    <div id="loading-bar" style="width: 0%; height: 100%; background: var(--primary); box-shadow: 0 0 10px var(--primary-glow); transition: width 0.3s;"></div>
+                </div>
+            </div>
+
+            <button id="btn-start" class="btn-primary" style="display: none; margin: 20px auto 0 auto;">INICIAR PROTESTO</button>
+            <button id="btn-open-ranking" class="btn-secondary" style="margin: 10px auto 0 auto;">🏆 Ver Ranking Mundial</button>
+        </div>
+    </div>
+
+    <!-- TELA 2: FIM DE JOGO (RESULTADO + RANKING) -->
+    <div id="end-screen" class="screen" style="display: none;">
+        <div class="content-box end-content-box">
+            <h1>A MUSICA ACABOU</h1>
+            <p>Mas a marcha continua.</p>
+
+            <div class="result-card">
+                <div class="result-player-info">
+                    <div class="result-char-icon" id="result-char-icon">🎤</div>
+                    <div class="result-player-text">
+                        <span class="result-player-name" id="result-player-name">Jogador</span>
+                        <span class="result-player-insta" id="result-player-insta"></span>
+                    </div>
+                </div>
+                <div class="result-score-block">
+                    <span class="result-score-label">VOZES REUNIDAS</span>
+                    <span class="result-score-value" id="final-score">0</span>
+                </div>
+                <div class="result-rank-badge" id="result-rank-badge">
+                    Calculando posicao...
+                </div>
+            </div>
+
+            <div class="ranking-container">
+                <div class="ranking-title">🌎 RANKING MUNDIAL</div>
+                <div id="ranking-list" class="ranking-list">
+                    <div class="ranking-loading">Carregando...</div>
+                </div>
+            </div>
+
+            <div class="end-buttons">
+                <button id="btn-restart" class="btn-primary">MARCHAR NOVAMENTE</button>
+                <button id="btn-certificate" class="btn-secondary" style="border-color: var(--primary); color: var(--primary); font-weight: 900;">📜 BAIXAR MEU CERTIFICADO</button>
+                <button id="btn-open-ranking-end" class="btn-secondary">VER RANKING COMPLETO</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TELA 3: RANKING COMPLETO -->
+    <div id="ranking-screen" class="screen" style="display: none;">
+        <div class="content-box ranking-full-box">
+            <div class="ranking-header">
+                <img src="assets/img/afrodizia.png" alt="Logo" style="height: 40px; filter: drop-shadow(0 0 10px rgba(255,204,0,0.5));">
+                <h2 style="margin: 8px 0 4px; font-size: 1.1rem; letter-spacing: 3px;">RANKING MUNDIAL</h2>
+                <p style="font-size: 0.75rem; color: #888; margin: 0;">As vozes mais fortes da marcha</p>
+            </div>
+
+            <div class="reward-banner">
+                🎁 <strong>RECOMPENSAS</strong> para os melhores lideres serao anunciadas no site oficial da Afrodizia!
+            </div>
+
+            <div id="ranking-full-list" class="ranking-list ranking-full-list-wrap">
+                <div class="ranking-loading">Carregando ranking...</div>
+            </div>
+
+            <button id="btn-close-ranking" class="btn-secondary" style="margin-top: 15px;">← VOLTAR</button>
+        </div>
+    </div>
+
+    <!-- OVERLAYS DE JOGO -->
+    <div id="ui-container" style="display: none;">
+        <div id="gas-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, rgba(100, 255, 100, 0) 0%, rgba(0, 150, 0, 0.4) 100%); pointer-events: none; opacity: 0; transition: opacity 0.5s; z-index: 100;"></div>
+        <div id="hud">
+            <div class="score-box">
+                VOZES NA MARCHA: <span id="scoreDisplay">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="cinematic-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 60; background: rgba(0,0,0,0.9); pointer-events: none; transition: background 1s ease-out; flex-direction: column; justify-content: center; align-items: center;">
+        <img id="cinematic-logo" src="assets/img/afrodizia.png" class="cinematic-logo">
+        <h1 id="cinematic-text" style="font-family: 'Oswald', sans-serif; font-size: 3.5rem; color: #ffcc00; text-align: center; text-transform: uppercase; text-shadow: 0 0 30px rgba(255, 204, 0, 0.8); opacity: 0; transition: opacity 0.8s ease-in-out; padding: 20px; transform: scale(0.9);"></h1>
+    </div>
+
+    <div id="game-container"></div>
+    <audio id="bg-music" src="assets/musica.mp3" preload="auto"></audio>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
