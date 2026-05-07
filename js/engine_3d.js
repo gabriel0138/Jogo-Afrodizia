@@ -759,11 +759,12 @@ export class GameEngine3D {
                         // Fix crucial: Removemos o emissivo de componentes transparentes (como as sombras no pé dos aliados)
                         // para resolver o bug das "bolhas amarelas" no chão que estavam travadas embaixo deles!
                         const isShadow = child.material.transparent || (child.name && child.name.toLowerCase().includes('shadow'));
-                        const newMat = new THREE.MeshLambertMaterial({
+                        const newMat = new THREE.MeshPhongMaterial({
                             map: child.material.map,
                             color: child.material.color,
-                            emissive: isShadow ? new THREE.Color(0x000000) : new THREE.Color(0x444444),
-                            emissiveIntensity: isShadow ? 0.0 : 0.15,
+                            emissive: isShadow ? new THREE.Color(0x000000) : new THREE.Color(0x222222),
+                            emissiveIntensity: isShadow ? 0.0 : 0.2,
+                            shininess: 30, // Dá um leve brilho de reflexo urbano
                             transparent: child.material.transparent,
                             opacity: child.material.opacity
                         });
