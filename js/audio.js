@@ -112,7 +112,7 @@ export class AudioSystem {
         filter.frequency.setValueAtTime(1000, now);
 
         gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05); // Reduzido de 0.3 para 0.1
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
 
         osc.connect(filter);
@@ -135,7 +135,7 @@ export class AudioSystem {
         osc.frequency.setValueAtTime(150, now);
         osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
 
-        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.setValueAtTime(0.08, now); // Reduzido de 0.2 para 0.08
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
 
         osc.connect(gain);
