@@ -732,8 +732,8 @@ export class GameEngine3D {
         
         // A luz amarela itinerante (playerLight) foi REMOVIDA para limpar a visão.
         
-        const moonLight = new THREE.DirectionalLight(0xaaccff, 1.2); // Luz da lua mais forte
-        moonLight.position.set(-50, 100, -50);
+        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.8); 
+        moonLight.position.set(0, 100, 100); // Vindo de trás da câmera para iluminar o topo uniformemente
         this.scene.add(moonLight);
     }
 
@@ -856,8 +856,8 @@ export class GameEngine3D {
             // Upgraded specifically the road to Phong for cinematic wet reflections
             new THREE.MeshPhongMaterial({ 
                 color: 0x111111, 
-                specular: 0xffcc00, // Gold light reflection
-                shininess: 90,      // Wet asphalt look
+                specular: 0x222222, // Reflexo muito mais suave
+                shininess: 30,      
                 map: asphaltTex
             })
         );
@@ -990,7 +990,7 @@ export class GameEngine3D {
                         color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending
                     });
                     const glow = new THREE.Sprite(glowMat);
-                    glow.scale.set(3.0, 3.0, 3.0); 
+                    glow.scale.set(1.5, 1.5, 1.5); 
                     glow.position.set(bulbLocalX, bulbLocalY - 0.5, bulbLocalZ); 
                     st.add(glow);
 
@@ -2009,20 +2009,16 @@ export class GameEngine3D {
     }
 
     _collectPowerup(e, i) {
-        // Habilidade Única: Massau ganha 10 segundos de Megafone, outros ganham 5 padrão.
-        const duration = this.selectedChar === 'massau' ? 10.0 : 5.0;
-        
-        // Habilidade PRISCILLA: Recupera 10% das vozes (score) ao pegar o megafone
-        if (this.selectedChar === 'priscilla') {
-            const recovery = Math.floor(this.score * 0.1);
-            if (recovery > 0) {
-                this.score += recovery;
-                this._showFeedbackText(`+${recovery} RESILIÊNCIA!`, "#00ff88");
-            }
+        // Habilidade EXCLUSIVA Massau: Megafone
+        if (this.selectedChar === 'massau') {
+            const duration = 10.0;
+            this.powerupTimer = duration; 
+            this._showFeedbackText(`MEGAFONE: ${duration}s!`, "#ffcc00");
+        } else {
+            // Caso algum outro pegue por erro (não deveria spawnar), ganha apenas bônus de score
+            this._showFeedbackText(`+50 PONTOS!`, "#ffffff");
         }
 
-        this.powerupTimer = duration; 
-        this._showFeedbackText(`MEGAFONE: ${duration}s!`, "#ffcc00");
         this.hitlagTimer = 0.05;
         this.score += 50;
         if (this.onScoreUpdate) this.onScoreUpdate(this.score);
