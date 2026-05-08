@@ -246,6 +246,29 @@ class PlayerController {
         this.shadow.rotation.x = -Math.PI / 2;
         this.shadow.position.y = 0.3;
         this.scene.add(this.shadow);
+
+        // NOVO: Aura Visual de Habilidade
+        this.auraGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: this._createAuraTexture(),
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending
+        }));
+        this.auraGlow.scale.set(18, 18, 1);
+        this.scene.add(this.auraGlow);
+    }
+
+    _createAuraTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.2)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,128,128);
+        return new THREE.CanvasTexture(canvas);
     }
 
     setCharId(charId, texMap) {
@@ -442,6 +465,31 @@ class PlayerController {
 
         // Apply final vertical position
         this.sprite.position.y = this.baseY + this.y;
+
+        // Atualiza a Aura Visual
+        if (this.auraGlow) {
+            this.auraGlow.position.copy(this.sprite.position);
+            this.auraGlow.position.z -= 0.1;
+            
+            let targetOpacity = 0;
+            if (this.charId === 'tony') {
+                // Aura de Liderança: Brilha azulado baseado no tamanho da multidão (se houver pelo menos 1)
+                const crowdFactor = (window.engine && window.engine.playerCrowd) ? window.engine.playerCrowd.length : 0;
+                if (crowdFactor > 0) {
+                    targetOpacity = 0.2 + (crowdFactor * 0.12);
+                    this.auraGlow.material.color.setHex(0x00aaff);
+                    this.auraGlow.scale.set(15 + crowdFactor * 3, 15 + crowdFactor * 3, 1);
+                }
+            } else if (this.charId === 'priscilla') {
+                // Aura Lunar: Brilha prata/branco intenso apenas durante o pulo
+                if (this.isJumping) {
+                    targetOpacity = 0.6;
+                    this.auraGlow.material.color.setHex(0xffffff);
+                    this.auraGlow.scale.set(22, 22, 1);
+                }
+            }
+            this.auraGlow.material.opacity += (targetOpacity - this.auraGlow.material.opacity) * 10 * dt;
+        }
     }
 
     _updateAnimation(distanceTraveled) {
@@ -471,6 +519,7 @@ class PlayerController {
 
 export class GameEngine3D {
     constructor(containerEl, audioSystem) {
+        window.engine = this;
         this.container = containerEl;
         this.audio = audioSystem;
         this.score = 0;
@@ -666,21 +715,17 @@ export class GameEngine3D {
         this.assets = { tex: {}, mod: {} };
 
         // Optimized Cinematic Lighting Setup
-        // Hemisphere light gives a natural gradient from sky to ground (Blueish sky, dark asphalt reflection)
-        // Hemisphere light (Céu azulado, Solo com leve rebatimento de asfalto)
+        // Hemisphere light gives a natural gradient from sky to ground
         const hemiLight = new THREE.HemisphereLight(0x222244, 0x222222, 1.8);
         this.scene.add(hemiLight);
         
-        // Luz que segue o jogador (Dourada)
-        this.playerLight = new THREE.PointLight(0xffcc00, 3.0, 60); 
+        // Luz que segue o jogador (Dourada) - Agora com intensidade e posição corrigidas
+        this.playerLight = new THREE.PointLight(0xffcc00, 2.5, 50); 
         this.scene.add(this.playerLight);
         
-        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.8); // Luz da lua mais forte para contorno
+        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.8); // Luz da lua para contorno
         moonLight.position.set(-50, 100, -50);
         this.scene.add(moonLight);
-        
-        // O PointLight amarelo que seguia o jogador foi DELETADO pois estava gerando 
-        // aquele borrão amarelo enorme na visão por refrações não intencionais no shader.
     }
 
     /**
@@ -1610,6 +1655,13 @@ export class GameEngine3D {
         const targetX = this.lanePositions[this.currentLane];
         this.player.update(dt, targetX, this.distanceTraveled);
         
+        // Atualiza a luz do jogador para seguir sua posição horizontal e flutuar levemente
+        if (this.playerLight) {
+            this.playerLight.position.x = this.player.sprite.position.x;
+            this.playerLight.position.y = this.player.sprite.position.y + 5;
+            this.playerLight.position.z = 5; // Levemente à frente
+        }
+        
         // NOVO: Ghost Trail Effect em Altas Velocidades
         if (this.gameSpeed > this.baseSpeed + 15 && this.frameCount % 4 === 0) {
             this._createGhostTrail();
@@ -1703,17 +1755,21 @@ export class GameEngine3D {
 
             // NOVO: Habilidade Tática da Priscilla - Magnetismo de Vozes (POTENCIALIZADO)
             if (this.selectedChar === 'priscilla' && (e.type === 'ally' || e.type === 'powerup')) {
-                const magnetRange = 65.0; // Alcance aumentado
+                const magnetRange = 75.0; // Alcance aumentado para Priscilla
                 const dx = this.player.sprite.position.x - e.mesh.position.x;
                 const dz = this.player.sprite.position.z - e.mesh.position.z;
                 const distSq = dx * dx + dz * dz;
 
                 if (distSq < magnetRange * magnetRange) {
                     const dist = Math.sqrt(distSq);
-                    // Força de atração dobrada para um magnetismo mais "agressivo"
-                    const pullStrength = (1.0 - dist / magnetRange) * 120.0;
+                    const pullStrength = (1.0 - dist / magnetRange) * 140.0;
                     e.mesh.position.x += (dx / dist) * pullStrength * dt;
                     e.mesh.position.z += (dz / dist) * pullStrength * dt;
+                    
+                    // Efeito visual de rastro magnético (Partículas Douradas)
+                    if (this.particles && Math.random() > 0.8) {
+                        this.particles.emit(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, 1);
+                    }
                 }
             }
             if (e.type === 'powerup') {
@@ -1909,16 +1965,36 @@ export class GameEngine3D {
                 spawnX = lane === 0 ? -4.5 : (lane === 2 ? 4.5 : (Math.random() > 0.5 ? -4.5 : 4.5));
             }
 
-            // NOVO: Ajuste Visual Aleatório para Barricadas da Priscilla (Paredão vs Unidade Única)
+            // NOVO: Ajuste Visual para Barricadas da Priscilla (Uso de Clones Lado-a-Lado para evitar Estiramento de Textura)
             if (this.selectedChar === 'priscilla' && type === 'barricade') {
-                if (Math.random() > 0.4) { // 60% de chance de spawnar o paredão de 3 faixas
+                if (Math.random() > 0.4) { 
                     entity.subType = 'fullWidth';
-                    spawnX = 0; // Centraliza
-                    entity.mesh.scale.x *= 3.2; 
-                    entity.mesh.scale.y *= 1.3; // Ajuste de altura solicitado: Paredão mais alto
+                    spawnX = 0; 
+                    
+                    // Em vez de esticar um só, criamos um "paredão" visual adicionando sub-objetos laterais
+                    // Isso mantém a proporção da textura em 100% (Phong visual fix)
+                    if (!entity.mesh.userData.isFullWidth) {
+                        const leftSide = entity.mesh.clone();
+                        leftSide.position.set(-9, 0, 0); // Ocupa a pista da esquerda
+                        entity.mesh.add(leftSide);
+                        
+                        const rightSide = entity.mesh.clone();
+                        rightSide.position.set(9, 0, 0); // Ocupa a pista da direita
+                        entity.mesh.add(rightSide);
+                        
+                        entity.mesh.userData.isFullWidth = true;
+                    }
+                    entity.mesh.scale.y = 1.35; // Paredão mais imponente e alto
                 } else {
-                    entity.subType = 'normal'; // 40% de chance de ser uma barricada comum de 1 faixa
-                    // spawnX permanece o original da lane sorteada
+                    entity.subType = 'normal';
+                    entity.mesh.scale.y = 1.0;
+                    // Remove sub-objetos se existirem (reciclagem limpa)
+                    if (entity.mesh.userData.isFullWidth) {
+                        const toRemove = [];
+                        entity.mesh.children.forEach(c => { if(c.type === 'Group' || c.type === 'Mesh') toRemove.push(c); });
+                        toRemove.forEach(c => entity.mesh.remove(c));
+                        entity.mesh.userData.isFullWidth = false;
+                    }
                 }
             }
 
@@ -1970,6 +2046,14 @@ export class GameEngine3D {
         if (this.selectedChar === 'tony') {
             const crowdBonus = 1 + (this.playerCrowd.length * 0.08);
             earned = Math.floor(earned * crowdBonus);
+            
+            // MECÂNICA DE PRECISÃO: Bônus de "Coleta Perfeita" se estiver bem alinhado
+            const xDist = Math.abs(e.mesh.position.x - this.player.sprite.position.x);
+            if (xDist < 1.5) {
+                earned += 15;
+                this._showFeedbackText("PERFEITO! +15", "#00ffff");
+                if (this.audio) this.audio.playJump(); // Som de confirmação extra
+            }
         }
         
         this.score += earned;

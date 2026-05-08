@@ -28,7 +28,7 @@ if (fs.existsSync(DB_FILE)) {
 
 const server = http.createServer((req, res) => {
     // Roteamento da API de Ranking para teste LOCAL
-    if (req.url.startsWith('/api/ranking')) {
+    if (req.url.startsWith('/api/ranking') || req.url.startsWith('/ranking.php')) {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         
         if (req.method === 'GET') {
