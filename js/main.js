@@ -161,6 +161,16 @@ async function submitRegister(skip = false) {
 function updateUI() {
     if (totalVozesEl) totalVozesEl.innerText = totalVozes.toLocaleString('pt-BR');
     
+    // Lógica de Scroll do Carrossel (Setas)
+    const carousel = document.getElementById('char-carousel');
+    const prevBtn = document.getElementById('carousel-prev');
+    const nextBtn = document.getElementById('carousel-next');
+
+    if (carousel && prevBtn && nextBtn) {
+        prevBtn.onclick = () => carousel.scrollBy({ left: -150, behavior: 'smooth' });
+        nextBtn.onclick = () => carousel.scrollBy({ left: 150, behavior: 'smooth' });
+    }
+
     document.querySelectorAll('.char-btn').forEach(btn => {
         const charId = btn.dataset.char;
         const lock = btn.querySelector('.lock-overlay');

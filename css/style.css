@@ -297,13 +297,44 @@ p {
     overflow: hidden;
 }
 .character-select h3 {
-    font-size: clamp(0.6rem, 3vw, 0.75rem);
-    color: var(--primary);
-    margin-bottom: 15px;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    font-weight: 900;
     text-align: center;
+}
+.carousel-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-top: 5px;
+}
+.carousel-arrow {
+    background: rgba(255, 204, 0, 0.15);
+    border: 1px solid rgba(255, 204, 0, 0.4);
+    color: var(--primary);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 24px;
+    z-index: 5;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+.carousel-arrow:hover { background: var(--primary); color: #000; }
+.carousel-arrow:active { transform: scale(0.9); }
+.carousel-arrow.prev { margin-right: 5px; }
+.carousel-arrow.next { margin-left: 5px; }
+
+.carousel-hint {
+    font-size: 0.65rem;
+    color: #555;
+    margin: 4px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    opacity: 0.8;
 }
 
 /* Carrossel de Personagens Otimizado */
