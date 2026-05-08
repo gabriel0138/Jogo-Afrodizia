@@ -153,6 +153,39 @@ export function renderRankingHTML(scores, currentInstagram = '') {
             <span class="rank-score">${scoreFormatted}</span>
         </div>`;
     }).join('');
+
+    // NOVO: Adiciona a posição do jogador atual se ele NÃO estiver no Top (para visualização de contexto)
+    if (currentInstagram) {
+        const isPlayerInTop = scores.some(e => e.instagram.toLowerCase() === currentInstagram.toLowerCase());
+        if (!isPlayerInTop) {
+            // Buscamos o score local para mostrar o "VOCÊ" (contexto de ranking pessoal)
+            const localScores = getLocalScores();
+            const playerEntry = localScores.find(e => e.instagram.toLowerCase() === currentInstagram.toLowerCase());
+            
+            if (playerEntry) {
+                const icon = CHAR_ICONS[playerEntry.character] || '🎵';
+                const charName = CHAR_NAMES[playerEntry.character] || playerEntry.character;
+                const scoreFormatted = playerEntry.score.toLocaleString('pt-BR');
+
+                html += `
+                <div class="ranking-divider" style="text-align:center; color:#444; margin: 10px 0;">...</div>
+                <div class="ranking-row ranking-row--current">
+                    <span class="rank-pos">#</span>
+                    <div class="rank-info">
+                        <span class="rank-name">${escapeHtml(playerEntry.name)} (VOCÊ)</span>
+                        <span class="rank-insta">@${escapeHtml(playerEntry.instagram)}</span>
+                    </div>
+                    <div class="rank-char">
+                        <span class="rank-char-icon">${icon}</span>
+                        <span class="rank-char-name">${charName}</span>
+                    </div>
+                    <span class="rank-score">${scoreFormatted}</span>
+                </div>`;
+            }
+        }
+    }
+
+    return html;
 }
 
 function escapeHtml(str) {

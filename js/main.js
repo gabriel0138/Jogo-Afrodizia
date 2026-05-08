@@ -306,6 +306,7 @@ function gameLoop(currentTime) {
 
 async function endGame(score) {
     isPlaying = false;
+    engine.resetPowerups(); // Corrigindo Bug do Cronômetro do Megafone
     uiContainer.style.display = 'none';
     endScreen.style.display = 'flex';
     finalScoreEl.innerText = score.toLocaleString('pt-BR');

@@ -618,6 +618,10 @@ export class GameEngine3D {
         window.addEventListener('resize', this._onResize.bind(this));
     }
 
+    resetPowerups() {
+        this.powerupTimer = 0;
+    }
+
     /**
      * Define o personagem atual e atualiza as texturas em tempo real.
      */
@@ -2034,6 +2038,14 @@ export class GameEngine3D {
         this.camera.position.y = 20; // Tremor forte
         
         this._recycleEntity(e, i);
+    }
+
+    /**
+     * NOVO: Limpa efeitos ativos (ex: Megafone) imediatamente.
+     * Útil para evitar o bug do cronômetro travado no fim de jogo.
+     */
+    resetPowerups() {
+        this.powerupTimer = 0;
     }
 
     _collectAlly(e, i) {
