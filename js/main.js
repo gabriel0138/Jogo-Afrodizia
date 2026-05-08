@@ -58,7 +58,7 @@ async function init() {
             updateLoading(70, "SINCRONIZANDO...");
             getPlayerProfile(playerInstagram).then(profile => {
                 if (profile) {
-                    totalVozes = Math.max(totalVozes, parseInt(profile.total_vozes || 0));
+                    totalVozes = Math.max(totalVozes, parseInt(profile.totalVozes || 0));
                     const serverChars = profile.unlocked_chars || ['massau'];
                     unlockedChars = Array.from(new Set([...unlockedChars, ...serverChars]));
                     
@@ -143,7 +143,7 @@ async function submitRegister(skip = false) {
         try {
             const profile = await getPlayerProfile(insta);
             if (profile) {
-                totalVozes = Math.max(totalVozes, parseInt(profile.total_vozes || 0));
+                totalVozes = Math.max(totalVozes, parseInt(profile.totalVozes || 0));
                 const serverChars = profile.unlocked_chars || ['massau'];
                 unlockedChars = Array.from(new Set([...unlockedChars, ...serverChars]));
             }

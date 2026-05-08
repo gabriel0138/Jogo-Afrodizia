@@ -49,7 +49,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     if (isset($_GET['instagram'])) {
         $insta = strtolower(trim($_GET['instagram']));
-        $stmt = $pdo->prepare("SELECT * FROM afrodizia_players WHERE instagram = ? LIMIT 1");
+        $stmt = $pdo->prepare("SELECT name, instagram, best_score as score, total_vozes as totalVozes, unlocked_chars, last_char as `character` FROM afrodizia_players WHERE instagram = ? LIMIT 1");
         $stmt->execute([$insta]);
         $player = $stmt->fetch();
         
