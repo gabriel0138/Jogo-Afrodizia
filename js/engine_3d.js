@@ -230,7 +230,7 @@ class PlayerController {
         this.material = new THREE.SpriteMaterial({ 
             map: this.atlas, 
             transparent: true,
-            alphaTest: 0.05 // Descarta pixels quase invisíveis para evitar o efeito "quadrado"
+            alphaTest: 0.5 // Aumentado para eliminar o efeito de "quadrado" nas bordas
         });
         
         this.sprite = new THREE.Sprite(this.material);
@@ -328,20 +328,21 @@ class PlayerController {
             for(let i=0; i<data.length; i+=4) {
                 const r = data[i]/255, g = data[i+1]/255, b = data[i+2]/255;
                 
-                let chromaDist = 0;
-                if (expectedChroma === 'blue') {
-                    chromaDist = b - Math.max(r, g);
-                } else {
-                    chromaDist = g - Math.max(r, b);
-                }
-                
-                // Algoritmo de Soft Masking (Transparência Gradual)
-                // Substitui o "quadrado" por bordas suaves e anti-aliased
-                let alpha = 1.0 - smoothstep(similarity - smoothness, similarity, chromaDist);
-                data[i+3] = Math.floor(alpha * 255);
-                
-                // Spill Suppression (Remove o "halo" verde/azul do corpo do personagem)
-                if (alpha > 0) {
+            // Algoritmo de Chroma Key Otimizado
+            // Detecta a predominância do canal (Verde ou Azul) com maior tolerância
+            let chromaDist = 0;
+            if (expectedChroma === 'blue') {
+                chromaDist = b - Math.max(r, g) * 1.1; 
+            } else {
+                chromaDist = g - Math.max(r, b) * 1.1;
+            }
+            
+            // Mascaramento suave com threshold ajustado
+            let alpha = 1.0 - smoothstep(0.05, 0.25, chromaDist);
+            data[i+3] = Math.floor(alpha * 255);
+            
+            // Spill Suppression: Limpa o reflexo da cor de fundo no personagem
+            if (alpha > 0) {
                     if (expectedChroma === 'blue') {
                         if (b > (r + g) * 0.5) {
                             data[i+2] = Math.floor((r + g) * 0.5 * 255);
@@ -716,14 +717,12 @@ export class GameEngine3D {
 
         // Optimized Cinematic Lighting Setup
         // Hemisphere light gives a natural gradient from sky to ground
-        const hemiLight = new THREE.HemisphereLight(0x222244, 0x222222, 1.8);
+        const hemiLight = new THREE.HemisphereLight(0x444466, 0x222222, 2.2); // Intensidade aumentada para compensar
         this.scene.add(hemiLight);
         
-        // Luz que segue o jogador (Dourada) - Agora com intensidade e posição corrigidas
-        this.playerLight = new THREE.PointLight(0xffcc00, 2.5, 50); 
-        this.scene.add(this.playerLight);
+        // A luz amarela itinerante (playerLight) foi REMOVIDA para limpar a visão.
         
-        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.8); // Luz da lua para contorno
+        const moonLight = new THREE.DirectionalLight(0xaaccff, 1.2); // Luz da lua mais forte
         moonLight.position.set(-50, 100, -50);
         this.scene.add(moonLight);
     }
@@ -1654,13 +1653,6 @@ export class GameEngine3D {
         // 1. Update Player
         const targetX = this.lanePositions[this.currentLane];
         this.player.update(dt, targetX, this.distanceTraveled);
-        
-        // Atualiza a luz do jogador para seguir sua posição horizontal e flutuar levemente
-        if (this.playerLight) {
-            this.playerLight.position.x = this.player.sprite.position.x;
-            this.playerLight.position.y = this.player.sprite.position.y + 5;
-            this.playerLight.position.z = 5; // Levemente à frente
-        }
         
         // NOVO: Ghost Trail Effect em Altas Velocidades
         if (this.gameSpeed > this.baseSpeed + 15 && this.frameCount % 4 === 0) {
