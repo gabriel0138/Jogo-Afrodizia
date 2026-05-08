@@ -1973,7 +1973,23 @@ export class GameEngine3D {
             const toRemove = [];
             entity.mesh.children.forEach(c => { if(c.userData.isClone) toRemove.push(c); });
             toRemove.forEach(c => entity.mesh.remove(c));
-            entity.mesh.scale.set(1, 1, 1);
+            
+            // RESTAURAÇÃO DE ESCALAS ORIGINAIS (Evita o bug de tudo ficar minúsculo)
+            if (type === 'truck') {
+                entity.mesh.scale.set(24, 24, 24);
+            } else if (type === 'barricade') {
+                // Identifica qual modelo de barricada é para aplicar a escala correta
+                if (entity.mesh.geometry === (this.assets.mod.barricade3 ? this.assets.mod.barricade3.geometry : null)) {
+                    entity.mesh.scale.set(4.5, 4.5, 4.5);
+                } else {
+                    entity.mesh.scale.set(6, 6, 6);
+                }
+            } else if (type === 'ally') {
+                entity.mesh.scale.set(3.5, 3.5, 3.5);
+            } else {
+                entity.mesh.scale.set(1, 1, 1);
+            }
+
             entity.subType = 'normal';
 
             entity.mesh.position.set(spawnX, type==='ally'? 1 : 0, -800);
