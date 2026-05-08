@@ -1806,9 +1806,7 @@ export class GameEngine3D {
             const colZ = e.type === 'truck' ? 3.5 : 3.0; // Reduzido para maior precisão visual
             // A largura exata de 2 pistas é em torno de 9.0. Ajustado o hitbox X para 8.0
             // Assim, a 3ª pista fica 100% livre e o jogador não toma body block injusto
-            const colX_base = (e.type === 'truck' || e.subType === 'wide') ? 7.0 : 3.5; 
-            // NOVO: Barricadas ocupam 3 faixas para a Priscilla... APENAS quando for o "paredão" (subType fullWidth)
-            const colX = (this.selectedChar === 'priscilla' && e.subType === 'fullWidth') ? 15.0 : colX_base; 
+            const colX = (e.type === 'truck' || e.subType === 'wide') ? 7.0 : 3.5; 
 
             // Body Block e Altura de Colisão: Barricadas podem ser puladas, Carros não.
             let isHitY = false;
@@ -1971,38 +1969,12 @@ export class GameEngine3D {
                 spawnX = lane === 0 ? -4.5 : (lane === 2 ? 4.5 : (Math.random() > 0.5 ? -4.5 : 4.5));
             }
 
-            // NOVO: Ajuste Visual para Barricadas da Priscilla (Uso de Clones Lado-a-Lado para evitar Estiramento de Textura)
-            if (this.selectedChar === 'priscilla' && type === 'barricade') {
-                if (Math.random() > 0.4) { 
-                    entity.subType = 'fullWidth';
-                    spawnX = 0; 
-                    
-                    // Em vez de esticar um só, criamos um "paredão" visual adicionando sub-objetos laterais
-                    // Isso mantém a proporção da textura em 100% (Phong visual fix)
-                    if (!entity.mesh.userData.isFullWidth) {
-                        const leftSide = entity.mesh.clone();
-                        leftSide.position.set(-9, 0, 0); // Ocupa a pista da esquerda
-                        entity.mesh.add(leftSide);
-                        
-                        const rightSide = entity.mesh.clone();
-                        rightSide.position.set(9, 0, 0); // Ocupa a pista da direita
-                        entity.mesh.add(rightSide);
-                        
-                        entity.mesh.userData.isFullWidth = true;
-                    }
-                    entity.mesh.scale.y = 1.35; // Paredão mais imponente e alto
-                } else {
-                    entity.subType = 'normal';
-                    entity.mesh.scale.y = 1.0;
-                    // Remove sub-objetos se existirem (reciclagem limpa)
-                    if (entity.mesh.userData.isFullWidth) {
-                        const toRemove = [];
-                        entity.mesh.children.forEach(c => { if(c.type === 'Group' || c.type === 'Mesh') toRemove.push(c); });
-                        toRemove.forEach(c => entity.mesh.remove(c));
-                        entity.mesh.userData.isFullWidth = false;
-                    }
-                }
-            }
+            // Limpeza de segurança para evitar duplicatas em objetos reciclados
+            const toRemove = [];
+            entity.mesh.children.forEach(c => { if(c.userData.isClone) toRemove.push(c); });
+            toRemove.forEach(c => entity.mesh.remove(c));
+            entity.mesh.scale.set(1, 1, 1);
+            entity.subType = 'normal';
 
             entity.mesh.position.set(spawnX, type==='ally'? 1 : 0, -800);
             
