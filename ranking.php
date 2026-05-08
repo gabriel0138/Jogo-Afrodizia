@@ -7,7 +7,7 @@
 // --- CONFIGURAÇÕES DE CONEXÃO ---
 $db_config = [
     'host' => 'localhost',
-    'db'   => 'afrodizia1',
+    'db'   => 'afrodizia',
     'user' => 'afrodizia1',
     'pass' => 'OneLoveAfro26@',
 ];
@@ -58,9 +58,11 @@ if ($method === 'GET') {
         }
         echo json_encode($player ?: null);
     } else {
-        $limit = Math.min(100, isset($_GET['limit']) ? (int)$_GET['limit'] : 20);
-        $stmt = $pdo->prepare("SELECT name, instagram, last_char as `character`, best_score as score, total_vozes as totalVozes FROM afrodizia_players ORDER BY best_score DESC LIMIT ?");
-        $stmt->execute([$limit]);
+        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
+        $limit = ($limit > 100) ? 100 : $limit;
+        
+        $stmt = $pdo->prepare("SELECT name, instagram, last_char as `character`, best_score as score, total_vozes as totalVozes FROM afrodizia_players ORDER BY best_score DESC LIMIT $limit");
+        $stmt->execute();
         echo json_encode($stmt->fetchAll());
     }
 }
