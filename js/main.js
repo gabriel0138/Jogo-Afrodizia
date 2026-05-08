@@ -238,6 +238,10 @@ document.getElementById('btn-open-ranking')?.addEventListener('click', () => {
     rankingScreen.style.display = 'flex';
     loadRanking(document.getElementById('ranking-full-list'), 50);
 });
+document.getElementById('btn-open-ranking-end')?.addEventListener('click', () => {
+    rankingScreen.style.display = 'flex';
+    loadRanking(document.getElementById('ranking-full-list'), 50);
+});
 document.getElementById('btn-close-ranking')?.addEventListener('click', () => {
     rankingScreen.style.display = 'none';
 });

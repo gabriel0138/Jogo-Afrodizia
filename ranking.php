@@ -108,11 +108,6 @@ if ($method === 'POST') {
             ':name2' => $name, ':score2' => $score, ':total2' => $total, ':chars2' => $charsJson, ':last_char2' => $char
         ]);
 
-        // Rank Atual
-        $stmtRank = $pdo->prepare("SELECT COUNT(*) + 1 as rank FROM afrodizia_players WHERE best_score > (SELECT best_score FROM afrodizia_players WHERE instagram = ?)");
-        $stmtRank->execute([$insta]);
-        $rank = $stmtRank->fetch()['rank'] ?? '-';
-
         $pdo->commit();
 
         echo json_encode([
