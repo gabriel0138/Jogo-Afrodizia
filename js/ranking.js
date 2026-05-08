@@ -1,9 +1,9 @@
 // ==========================================
-// 🏆 RANKING SYSTEM — AFRODIZIA (VERCEL READY)
+// 🏆 RANKING SYSTEM — AFRODIZIA (HYBRID)
 // ==========================================
 
-// Substitua pela URL da sua API no Vercel após o deploy
 const API_URL = 'ranking.php'; 
+const VERCEL_URL = '/api/ranking';
 
 export const CHAR_ICONS = {
     massau:   '🎤',
@@ -21,9 +21,6 @@ export const CHAR_NAMES = {
     sub:      'Sub'
 };
 
-/** 
- * SAVE: Envia o score e sincroniza o progresso com a Locaweb
- */
 export async function saveScore(entry) {
     const payload = {
         name:      entry.name.substring(0, 25),
@@ -31,113 +28,96 @@ export async function saveScore(entry) {
         character: entry.character,
         score:     Math.min(Math.max(0, parseInt(entry.score) || 0), 999999),
         totalVozes: parseInt(entry.totalVozes) || 0,
-        unlockedChars: entry.unlockedChars || ['massau'], // CRUCIAL: Salva o progresso
+        unlockedChars: entry.unlockedChars || ['massau'],
         timestamp: Date.now(),
     };
 
     try {
-        const res = await fetch(API_URL, {
+        let response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
-        if (res.ok) {
-            console.log('[Ranking] Sincronizado com Locaweb!');
-            const data = await res.json();
-            return { 
-                rank: data.rank || '??',
-                totalVozes: data.totalVozes || payload.totalVozes,
-                unlockedChars: data.unlockedChars || payload.unlockedChars
-            };
+
+        if (!response.ok || response.status === 404) {
+            response = await fetch(VERCEL_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }
+
+        if (response.ok) {
+            const data = await response.json();
+            return { rank: data.rank || '??', totalVozes: payload.totalVozes, unlockedChars: payload.unlockedChars };
         }
     } catch (err) {
-        console.warn('[Ranking] Modo offline ativado.', err);
-        _saveLocal(payload);
+        console.warn('[Ranking] Usando cache local.', err);
     }
 
-    // Fallback local
+    _saveLocal(payload);
     const all = getLocalScores();
     const sorted = all.sort((a, b) => b.score - a.score);
-    const rank = sorted.findIndex(e => e.instagram === payload.instagram && e.score === payload.score) + 1;
+    const rank = sorted.findIndex(e => e.instagram === payload.instagram) + 1;
     return { rank: rank || '-', totalVozes: payload.totalVozes, unlockedChars: payload.unlockedChars };
 }
 
-/**
- * GET_PROFILE: Busca os dados de um jogador específico para sincronizar
- */
-export async function getPlayerProfile(instagram) {
-    if (!instagram) return null;
+export async function getTopScores(limit = 20) {
     try {
-        const res = await fetch(`${API_URL}?instagram=${instagram}`);
-        if (res.ok) {
-            return await res.json();
+        let response = await fetch(`${API_URL}?limit=${limit}`);
+        
+        if (!response.ok || response.status === 404) {
+            response = await fetch(`${VERCEL_URL}?limit=${limit}`);
         }
-    } catch (err) {
-        console.warn('[Ranking] Erro ao buscar perfil remoto.', err);
-    }
-    return null;
-}
 
-/** 
- * GET: Busca os Top N scores da API ou local
- */
-export async function getTopScores(limit = 10) {
-    try {
-        const res = await fetch(`${API_URL}?limit=${limit}`);
-        if (res.ok) {
-            return await res.json();
-        }
+        if (response.ok) return await response.json();
     } catch (err) {
-        console.warn('[Ranking] Erro ao buscar ranking remoto, lendo local.', err);
+        console.warn('[Ranking] Offline.');
     }
-    
     return getLocalScores().sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-/** ----------------------------------------
- * HELPER: Persiste no localStorage
- * ---------------------------------------- */
+export async function getPlayerProfile(instagram) {
+    try {
+        let response = await fetch(`${API_URL}?instagram=${instagram}`);
+        if (!response.ok || response.status === 404) {
+            response = await fetch(`${VERCEL_URL}?instagram=${instagram}`);
+        }
+        if (response.ok) return await response.json();
+    } catch (err) { }
+    return null;
+}
+
 function _saveLocal(entry) {
-    const scores = getLocalScores();
-    // Mantém apenas o melhor score por instagram
-    const existingIdx = scores.findIndex(s => s.instagram === entry.instagram);
-    if (existingIdx >= 0) {
-        if (entry.score > scores[existingIdx].score) scores[existingIdx] = entry;
+    let scores = getLocalScores();
+    const idx = scores.findIndex(s => s.instagram === entry.instagram);
+    if (idx > -1) {
+        scores[idx].score = Math.max(scores[idx].score, entry.score);
+        scores[idx].totalVozes = entry.totalVozes;
+        scores[idx].unlockedChars = entry.unlockedChars;
     } else {
         scores.push(entry);
     }
-    // Guarda apenas top 100
-    scores.sort((a, b) => b.score - a.score);
-    localStorage.setItem('afrodiziaScores', JSON.stringify(scores.slice(0, 100)));
+    localStorage.setItem('afrodizia_ranking', JSON.stringify(scores.slice(0, 50)));
 }
 
 export function getLocalScores() {
     try {
-        return JSON.parse(localStorage.getItem('afrodiziaScores') || '[]');
-    } catch { return []; }
+        return JSON.parse(localStorage.getItem('afrodizia_ranking')) || [];
+    } catch (e) { return []; }
 }
 
-/** ----------------------------------------
- * RENDER: Gera o HTML do ranking
- * @param {Array} scores
- * @param {string} currentInstagram - Para destacar o jogador atual
- * @returns {string} HTML
- * ---------------------------------------- */
 export function renderRankingHTML(scores, currentInstagram = '') {
     if (!scores || scores.length === 0) {
         return `<div class="ranking-empty">Seja o primeiro a entrar no ranking! 🔥</div>`;
     }
 
-    const medals = ['🥇', '🥈', '🥉'];
-
-    return scores.map((entry, i) => {
-        const pos = i + 1;
-        const medal = medals[i] || `<span class="rank-num">${pos}</span>`;
-        const icon = CHAR_ICONS[entry.character] || '🎵';
+    let html = scores.map((entry, i) => {
+        const isCurrent = currentInstagram && entry.instagram && entry.instagram.toLowerCase() === currentInstagram.toLowerCase();
+        const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : i + 1));
+        const icon = CHAR_ICONS[entry.character] || '🎤';
         const charName = CHAR_NAMES[entry.character] || entry.character;
-        const isCurrent = entry.instagram.toLowerCase() === currentInstagram.toLowerCase();
-        const scoreFormatted = entry.score.toLocaleString('pt-BR');
+        const scoreFormatted = (entry.score || entry.best_score || 0).toLocaleString('pt-BR');
 
         return `
         <div class="ranking-row ${isCurrent ? 'ranking-row--current' : ''}">
@@ -154,11 +134,9 @@ export function renderRankingHTML(scores, currentInstagram = '') {
         </div>`;
     }).join('');
 
-    // NOVO: Adiciona a posição do jogador atual se ele NÃO estiver no Top (para visualização de contexto)
     if (currentInstagram) {
         const isPlayerInTop = scores.some(e => e.instagram.toLowerCase() === currentInstagram.toLowerCase());
         if (!isPlayerInTop) {
-            // Buscamos o score local para mostrar o "VOCÊ" (contexto de ranking pessoal)
             const localScores = getLocalScores();
             const playerEntry = localScores.find(e => e.instagram.toLowerCase() === currentInstagram.toLowerCase());
             
@@ -189,9 +167,8 @@ export function renderRankingHTML(scores, currentInstagram = '') {
 }
 
 function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
