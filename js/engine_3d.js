@@ -240,21 +240,23 @@ class PlayerController {
 
         // Shadow tracks player
         this.shadow = new THREE.Mesh(
-            new THREE.CircleGeometry(2.5, 20), 
-            new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 })
+            new THREE.CircleGeometry(2.2, 20), 
+            new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4 })
         );
         this.shadow.rotation.x = -Math.PI / 2;
-        this.shadow.position.y = 0.3;
+        this.shadow.position.y = 0.2;
         this.scene.add(this.shadow);
 
-        // NOVO: Aura Visual de Habilidade
+        // NOVO: Aura Visual de Habilidade - Invisível por padrão
         this.auraGlow = new THREE.Sprite(new THREE.SpriteMaterial({
             map: this._createAuraTexture(),
             transparent: true,
             opacity: 0,
-            blending: THREE.AdditiveBlending
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
         }));
         this.auraGlow.scale.set(18, 18, 1);
+        this.auraGlow.visible = false;
         this.scene.add(this.auraGlow);
     }
 
@@ -328,20 +330,20 @@ class PlayerController {
             for(let i=0; i<data.length; i+=4) {
                 const r = data[i]/255, g = data[i+1]/255, b = data[i+2]/255;
                 
-            // Algoritmo de Chroma Key Otimizado
-            // Detecta a predominância do canal (Verde ou Azul) com maior tolerância
+            // Algoritmo de Chroma Key "Zero Translucency"
+            // Usa um corte seco (hard cut) para eliminar qualquer rastro de fundo
             let chromaDist = 0;
             if (expectedChroma === 'blue') {
-                chromaDist = b - Math.max(r, g) * 1.1; 
+                chromaDist = b - Math.max(r, g) * 1.2; 
             } else {
-                chromaDist = g - Math.max(r, b) * 1.1;
+                chromaDist = g - Math.max(r, b) * 1.2;
             }
             
-            // Mascaramento suave com threshold ajustado
-            let alpha = 1.0 - smoothstep(0.05, 0.25, chromaDist);
+            // Pixels são ou 100% visíveis ou 0% visíveis (Adeus quadro translúcido)
+            let alpha = chromaDist > 0.1 ? 0.0 : 1.0;
             data[i+3] = Math.floor(alpha * 255);
             
-            // Spill Suppression: Limpa o reflexo da cor de fundo no personagem
+            // Spill Suppression agressivo
             if (alpha > 0) {
                     if (expectedChroma === 'blue') {
                         if (b > (r + g) * 0.5) {
@@ -467,27 +469,35 @@ class PlayerController {
         // Apply final vertical position
         this.sprite.position.y = this.baseY + this.y;
 
-        // Atualiza a Aura Visual
+        // Atualiza a Aura Visual (Apenas se for Tony ou Priscilla)
         if (this.auraGlow) {
             this.auraGlow.position.copy(this.sprite.position);
             this.auraGlow.position.z -= 0.1;
             
             let targetOpacity = 0;
             if (this.charId === 'tony') {
-                // Aura de Liderança: Brilha azulado baseado no tamanho da multidão (se houver pelo menos 1)
                 const crowdFactor = (window.engine && window.engine.playerCrowd) ? window.engine.playerCrowd.length : 0;
                 if (crowdFactor > 0) {
+                    this.auraGlow.visible = true;
                     targetOpacity = 0.2 + (crowdFactor * 0.12);
                     this.auraGlow.material.color.setHex(0x00aaff);
                     this.auraGlow.scale.set(15 + crowdFactor * 3, 15 + crowdFactor * 3, 1);
+                } else {
+                    this.auraGlow.visible = false;
                 }
             } else if (this.charId === 'priscilla') {
-                // Aura Lunar: Brilha prata/branco intenso apenas durante o pulo
                 if (this.isJumping) {
+                    this.auraGlow.visible = true;
                     targetOpacity = 0.6;
                     this.auraGlow.material.color.setHex(0xffffff);
                     this.auraGlow.scale.set(22, 22, 1);
+                } else {
+                    targetOpacity = 0;
+                    if (this.auraGlow.material.opacity < 0.05) this.auraGlow.visible = false;
                 }
+            } else {
+                this.auraGlow.visible = false;
+                targetOpacity = 0;
             }
             this.auraGlow.material.opacity += (targetOpacity - this.auraGlow.material.opacity) * 10 * dt;
         }
