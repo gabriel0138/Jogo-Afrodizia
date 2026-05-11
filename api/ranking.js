@@ -18,14 +18,20 @@ export default async function handler(req, res) {
       const instagram = req.query.instagram ? req.query.instagram.toLowerCase().trim() : null;
 
       // 1. Buscar Ranking Top (do Sorted Set)
-      // ZREVRANGE devolve os membros do maior para o menor
-      const topInstas = await kv.zrevrange('afrodizia_ranking', 0, limit - 1, { withScores: true });
+      const topData = await kv.zrevrange('afrodizia_ranking', 0, limit - 1, { withScores: true });
       
+      // 2. Buscar Perfis em Pipeline para performance
+      const pipeline = kv.pipeline();
+      for (let i = 0; i < topData.length; i += 2) {
+        pipeline.hgetall(`afrodizia_player:${topData[i]}`);
+      }
+      const profiles = await pipeline.exec();
+
       const top = [];
-      for (let i = 0; i < topInstas.length; i += 2) {
-        const insta = topInstas[i];
-        const score = topInstas[i + 1];
-        const profile = await kv.hgetall(`afrodizia_player:${insta}`);
+      for (let i = 0, pIdx = 0; i < topData.length; i += 2, pIdx++) {
+        const insta = topData[i];
+        const score = topData[i + 1];
+        const profile = profiles[pIdx];
         top.push({
           instagram: insta,
           name: profile?.name || insta,
@@ -35,14 +41,16 @@ export default async function handler(req, res) {
         });
       }
 
-      // 2. Buscar Dados do Jogador (Sync)
+      // 3. Buscar Dados do Jogador Atual
       let playerInfo = null;
       if (instagram && instagram !== 'null' && instagram !== 'undefined') {
-        const profile = await kv.hgetall(`afrodizia_player:${instagram}`);
+        const [profile, score, rank] = await Promise.all([
+          kv.hgetall(`afrodizia_player:${instagram}`),
+          kv.zscore('afrodizia_ranking', instagram),
+          kv.zrevrank('afrodizia_ranking', instagram)
+        ]);
+        
         if (profile) {
-          const score = await kv.zscore('afrodizia_ranking', instagram);
-          const rank = await kv.zrevrank('afrodizia_ranking', instagram);
-          
           playerInfo = {
             instagram,
             name: profile.name,
@@ -75,34 +83,29 @@ export default async function handler(req, res) {
       const char = data.character || 'massau';
       const clientChars = data.unlockedChars || ['massau'];
 
-      // 1. Buscar progresso atual
-      const existingProfile = await kv.hgetall(`afrodizia_player:${insta}`);
+      // 1. Buscar progresso atual para merge
+      const [existingProfile, existingScore] = await Promise.all([
+        kv.hgetall(`afrodizia_player:${insta}`),
+        kv.zscore('afrodizia_ranking', insta)
+      ]);
       
-      let finalChars = clientChars;
-      let finalVozes = totalVozes;
-      let finalScore = score;
+      const finalChars = Array.from(new Set([...(existingProfile?.unlockedChars || []), ...clientChars]));
+      const finalVozes = Math.max(parseInt(existingProfile?.totalVozes) || 0, totalVozes);
+      const finalScore = Math.max(existingScore || 0, score);
 
-      if (existingProfile) {
-        const serverChars = existingProfile.unlockedChars || ['massau'];
-        finalChars = [...new Set([...serverChars, ...clientChars])];
-        finalVozes = Math.max(parseInt(existingProfile.totalVozes) || 0, totalVozes);
-        
-        const existingScore = await kv.zscore('afrodizia_ranking', insta);
-        finalScore = Math.max(existingScore || 0, score);
-      }
+      // 2. Salvar Profile e Ranking em Pipeline
+      await kv.pipeline()
+        .hset(`afrodizia_player:${insta}`, {
+          name: name || existingProfile?.name || insta,
+          totalVozes: finalVozes,
+          unlockedChars: finalChars,
+          lastChar: char,
+          lastSeen: Date.now()
+        })
+        .zadd('afrodizia_ranking', { score: finalScore, member: insta })
+        .exec();
 
-      // 2. Salvar Profile e Ranking
-      await kv.hset(`afrodizia_player:${insta}`, {
-        name,
-        totalVozes: finalVozes,
-        unlockedChars: finalChars,
-        lastChar: char,
-        lastSeen: Date.now()
-      });
-
-      await kv.zadd('afrodizia_ranking', { score: finalScore, member: insta });
-
-      // 3. Obter Rank
+      // 3. Obter Rank atualizado
       const rank = await kv.zrevrank('afrodizia_ranking', insta);
 
       return res.status(200).json({

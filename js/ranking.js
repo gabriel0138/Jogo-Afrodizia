@@ -161,8 +161,8 @@ export function renderRankingHTML(data, currentInstagram = '') {
         const entryInsta = (entry.instagram || '').toLowerCase();
         const isCurrent = currentInstagram && entryInsta === currentInstagram.toLowerCase();
         const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : i + 1));
-        const icon = CHAR_ICONS[entry.character] || CHAR_ICONS[entry.last_char] || '🎤';
-        const charName = CHAR_NAMES[entry.character] || CHAR_NAMES[entry.last_char] || 'Líder';
+        const icon = CHAR_ICONS[entry.character] || CHAR_ICONS[entry.lastChar] || CHAR_ICONS[entry.last_char] || '🎤';
+        const charName = CHAR_NAMES[entry.character] || CHAR_NAMES[entry.lastChar] || CHAR_NAMES[entry.last_char] || 'Líder';
         const scoreValue = entry.best_score !== undefined ? entry.best_score : (entry.score || 0);
         const scoreFormatted = scoreValue.toLocaleString('pt-BR');
 
@@ -185,8 +185,8 @@ export function renderRankingHTML(data, currentInstagram = '') {
     const isPlayerInTop = scores.some(e => (e.instagram || '').toLowerCase() === (currentInstagram || '').toLowerCase());
     
     if (currentInstagram && !isPlayerInTop && playerInfo) {
-        const icon = CHAR_ICONS[playerInfo.character] || CHAR_ICONS[playerInfo.last_char] || '🎵';
-        const charName = CHAR_NAMES[playerInfo.character] || CHAR_NAMES[playerInfo.last_char] || 'Você';
+        const icon = CHAR_ICONS[playerInfo.character] || CHAR_ICONS[playerInfo.lastChar] || CHAR_ICONS[playerInfo.last_char] || '🎵';
+        const charName = CHAR_NAMES[playerInfo.character] || CHAR_NAMES[playerInfo.lastChar] || CHAR_NAMES[playerInfo.last_char] || 'Você';
         const scoreValue = playerInfo.best_score !== undefined ? playerInfo.best_score : (playerInfo.score || 0);
         const scoreFormatted = scoreValue.toLocaleString('pt-BR');
         const rankValue = playerInfo.rank || '?';
