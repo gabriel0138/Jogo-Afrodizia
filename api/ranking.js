@@ -1,4 +1,10 @@
-import { kv } from '@vercel/kv';
+import { createClient } from 'redis';
+
+const redis = createClient({
+  url: process.env.REDIS_URL || process.env.KV_URL
+});
+
+redis.on('error', err => console.error('Redis Client Error', err));
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -13,51 +19,64 @@ export default async function handler(req, res) {
   const { method } = req;
 
   try {
+    if (!redis.isOpen) {
+      await redis.connect();
+    }
+
     if (method === 'GET') {
       const limit = parseInt(req.query.limit) || 20;
       const instagram = req.query.instagram ? req.query.instagram.toLowerCase().trim() : null;
 
       // 1. Buscar Ranking Top (do Sorted Set)
-      const topData = await kv.zrevrange('afrodizia_ranking', 0, limit - 1, { withScores: true });
+      const topData = await redis.zRangeWithScores('afrodizia_ranking', 0, limit - 1, { REV: true });
       
-      // 2. Buscar Perfis em Pipeline para performance
-      const pipeline = kv.pipeline();
-      for (let i = 0; i < topData.length; i += 2) {
-        pipeline.hgetall(`afrodizia_player:${topData[i]}`);
+      // 2. Buscar Perfis em Pipeline
+      const multi = redis.multi();
+      for (const item of topData) {
+        multi.hGetAll(`afrodizia_player:${item.value}`);
       }
-      const profiles = await pipeline.exec();
+      const profiles = await multi.exec();
 
       const top = [];
-      for (let i = 0, pIdx = 0; i < topData.length; i += 2, pIdx++) {
-        const insta = topData[i];
-        const score = topData[i + 1];
-        const profile = profiles[pIdx];
+      for (let i = 0; i < topData.length; i++) {
+        const insta = topData[i].value;
+        const score = topData[i].score;
+        const profile = profiles[i];
+        
+        let chars = profile?.unlockedChars || '["massau"]';
+        try { if (typeof chars === 'string') chars = JSON.parse(chars); } catch(e) {}
+        
         top.push({
           instagram: insta,
           name: profile?.name || insta,
           character: profile?.lastChar || 'massau',
           score: score,
-          totalVozes: profile?.totalVozes || 0
+          totalVozes: parseInt(profile?.totalVozes) || 0,
+          unlockedChars: chars
         });
       }
 
       // 3. Buscar Dados do Jogador Atual
       let playerInfo = null;
       if (instagram && instagram !== 'null' && instagram !== 'undefined') {
-        const [profile, score, rank] = await Promise.all([
-          kv.hgetall(`afrodizia_player:${instagram}`),
-          kv.zscore('afrodizia_ranking', instagram),
-          kv.zrevrank('afrodizia_ranking', instagram)
-        ]);
+        const profileP = redis.hGetAll(`afrodizia_player:${instagram}`);
+        const scoreP = redis.zScore('afrodizia_ranking', instagram);
+        const rankP = redis.zRevRank('afrodizia_ranking', instagram);
         
-        if (profile) {
+        const [profile, score, rank] = await Promise.all([profileP, scoreP, rankP]);
+        
+        if (profile && Object.keys(profile).length > 0) {
+          let pChars = profile.unlockedChars || '["massau"]';
+          try { if (typeof pChars === 'string') pChars = JSON.parse(pChars); } catch(e) {}
+
           playerInfo = {
             instagram,
             name: profile.name,
             character: profile.lastChar || 'massau',
             score: score || 0,
-            totalVozes: profile.totalVozes || 0,
-            unlocked_chars: profile.unlockedChars || ['massau'],
+            totalVozes: parseInt(profile.totalVozes) || 0,
+            unlocked_chars: pChars,
+            unlockedChars: pChars,
             rank: rank !== null ? rank + 1 : '?'
           };
         }
@@ -81,32 +100,33 @@ export default async function handler(req, res) {
       const score = Math.min(Math.max(0, parseInt(data.score) || 0), 999999);
       const totalVozes = parseInt(data.totalVozes) || 0;
       const char = data.character || 'massau';
-      const clientChars = data.unlockedChars || ['massau'];
+      let clientChars = data.unlockedChars || ['massau'];
 
       // 1. Buscar progresso atual para merge
-      const [existingProfile, existingScore] = await Promise.all([
-        kv.hgetall(`afrodizia_player:${insta}`),
-        kv.zscore('afrodizia_ranking', insta)
-      ]);
+      const existingProfile = await redis.hGetAll(`afrodizia_player:${insta}`);
+      const existingScoreStr = await redis.zScore('afrodizia_ranking', insta);
+      const existingScore = existingScoreStr ? parseInt(existingScoreStr) : 0;
       
-      const finalChars = Array.from(new Set([...(existingProfile?.unlockedChars || []), ...clientChars]));
+      let exChars = existingProfile?.unlockedChars || '[]';
+      try { if (typeof exChars === 'string') exChars = JSON.parse(exChars); } catch(e) {}
+      
+      const finalChars = Array.from(new Set([...exChars, ...clientChars]));
       const finalVozes = Math.max(parseInt(existingProfile?.totalVozes) || 0, totalVozes);
-      const finalScore = Math.max(existingScore || 0, score);
+      const finalScore = Math.max(existingScore, score);
 
-      // 2. Salvar Profile e Ranking em Pipeline
-      await kv.pipeline()
-        .hset(`afrodizia_player:${insta}`, {
-          name: name || existingProfile?.name || insta,
-          totalVozes: finalVozes,
-          unlockedChars: finalChars,
-          lastChar: char,
-          lastSeen: Date.now()
-        })
-        .zadd('afrodizia_ranking', { score: finalScore, member: insta })
-        .exec();
+      // 2. Salvar Profile e Ranking
+      const multi = redis.multi();
+      multi.hSet(`afrodizia_player:${insta}`, 'name', name || existingProfile?.name || insta);
+      multi.hSet(`afrodizia_player:${insta}`, 'totalVozes', finalVozes.toString());
+      multi.hSet(`afrodizia_player:${insta}`, 'unlockedChars', JSON.stringify(finalChars));
+      multi.hSet(`afrodizia_player:${insta}`, 'lastChar', char);
+      multi.hSet(`afrodizia_player:${insta}`, 'lastSeen', Date.now().toString());
+      
+      multi.zAdd('afrodizia_ranking', { score: finalScore, value: insta });
+      await multi.exec();
 
       // 3. Obter Rank atualizado
-      const rank = await kv.zrevrank('afrodizia_ranking', insta);
+      const rank = await redis.zRevRank('afrodizia_ranking', insta);
 
       return res.status(200).json({
         success: true,
