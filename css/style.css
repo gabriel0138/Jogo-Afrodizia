@@ -391,10 +391,7 @@ p {
 .char-btn.selected {
     border-color: var(--primary);
     background: rgba(255, 204, 0, 0.2);
-    box-shadow: 0 0 20px rgba(255, 204, 0, 0.4);
-    transform: scale(1.05);
-}
-    box-shadow: 0 0 15px var(--primary-glow), inset 0 0 10px rgba(255, 204, 0, 0.2);
+    box-shadow: 0 0 20px var(--primary-glow), inset 0 0 10px rgba(255, 204, 0, 0.2);
     transform: scale(1.05);
 }
 

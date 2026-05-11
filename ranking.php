@@ -1,18 +1,17 @@
 <?php
 /**
- * 💎 AFRODIZIA ENGINE - BACKEND V2.1 (ULTRA-ROBUST)
- * Refatorado para Segurança Máxima e Performance
+ * 💎 AFRODIZIA ENGINE - BACKEND V3.1 (ULTRA-ROBUST)
+ * Sistema de Sincronização e Ranking Global
  */
 
-// --- CONFIGURAÇÕES DE CONEXÃO ---
+// --- CONFIGURAÇÕES DE CONEXÃO (DEFINITIVAS LOCAWEB) ---
 $db_config = [
-    'host' => 'localhost',
+    'host' => 'afrodizia.mysql.dbaas.com.br',
     'db'   => 'afrodizia',
-    'user' => 'afrodizia1',
-    'pass' => 'OneLoveAfro26@',
+    'user' => 'afrodizia', 
+    'pass' => 'OneLoveAfro26@', 
 ];
 
-// Configurações de Gameplay (Anti-Cheat)
 $MAX_POSSIBLE_SCORE = 999999; 
 
 header('Content-Type: application/json; charset=utf-8');
@@ -22,57 +21,76 @@ header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
-// Log de erros personalizado para Locaweb
 function logError($msg) {
-    error_log("[Afrodizia DB Error] " . $msg);
+    error_log("[Afrodizia DB] " . $msg);
 }
 
 try {
     $dsn = "mysql:host={$db_config['host']};dbname={$db_config['db']};charset=utf8mb4";
-    $options = [
+    $pdo = new PDO($dsn, $db_config['user'], $db_config['pass'], [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
-        PDO::ATTR_PERSISTENT         => false // Desativado para compatibilidade total Locaweb
-    ];
-    $pdo = new PDO($dsn, $db_config['user'], $db_config['pass'], $options);
+    ]);
 } catch (PDOException $e) {
-    logError($e->getMessage());
+    logError("Falha na conexão: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(["error" => "Falha crítica no sistema"]);
+    echo json_encode(["error" => "Sem conexão com o banco", "debug" => $e->getMessage()]);
     exit;
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// 📥 GET: Ranking ou Perfil
+// 📥 GET: Buscar Ranking ou Sincronizar Perfil
 if ($method === 'GET') {
-    if (isset($_GET['instagram'])) {
-        $insta = strtolower(trim($_GET['instagram']));
-        $stmt = $pdo->prepare("SELECT name, instagram, best_score as score, total_vozes as totalVozes, unlocked_chars, last_char as `character` FROM afrodizia_players WHERE instagram = ? LIMIT 1");
-        $stmt->execute([$insta]);
-        $player = $stmt->fetch();
-        
-        if ($player) {
-            $player['unlocked_chars'] = json_decode($player['unlocked_chars'] ?? '["massau"]');
-        }
-        echo json_encode($player ?: null);
-    } else {
-        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
-        $limit = ($limit > 100) ? 100 : $limit;
-        
-        $stmt = $pdo->prepare("SELECT name, instagram, last_char as `character`, best_score as score, total_vozes as totalVozes FROM afrodizia_players ORDER BY best_score DESC LIMIT $limit");
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
+    $insta = isset($_GET['instagram']) ? strtolower(trim($_GET['instagram'])) : null;
+    
+    try {
+        // 1. Buscar Ranking Top
+        $stmt = $pdo->prepare("SELECT name, instagram, last_char as `character`, best_score as score, total_vozes as totalVozes FROM afrodizia_players ORDER BY best_score DESC LIMIT :limit");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
-        echo json_encode($stmt->fetchAll());
+        $top = $stmt->fetchAll();
+        
+        // 2. Buscar Dados do Jogador (Sync)
+        $playerInfo = null;
+        if ($insta && $insta !== 'null' && $insta !== 'undefined') {
+            $stmt = $pdo->prepare("
+                SELECT name, instagram, last_char as `character`, best_score as score, total_vozes as totalVozes, unlocked_chars,
+                (SELECT COUNT(*) + 1 FROM afrodizia_players WHERE best_score > p.best_score) as rank
+                FROM afrodizia_players p WHERE instagram = ? LIMIT 1
+            ");
+            $stmt->execute([$insta]);
+            $playerInfo = $stmt->fetch();
+            
+            if ($playerInfo) {
+                // Decodifica personagens para JSON real para o JS
+                $playerInfo['unlocked_chars'] = json_decode($playerInfo['unlocked_chars']) ?? ['massau'];
+            }
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'top' => $top,
+            'player' => $playerInfo
+        ]);
+    } catch (Exception $e) {
+        logError("Erro no GET: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(["success" => false, "error" => "Erro ao carregar dados"]);
     }
+    exit;
 }
 
-// 📤 POST: Salvar Score e Sincronizar
+// 📤 POST: Salvar Progresso (Score, Vozes, Personagens)
 if ($method === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
+    $rawBody = file_get_contents('php://input');
+    $data = json_decode($rawBody, true);
     
     if (!$data || !isset($data['instagram'])) {
         http_response_code(400);
+        echo json_encode(["success" => false, "error" => "Dados inválidos"]);
         exit;
     }
 
@@ -81,47 +99,78 @@ if ($method === 'POST') {
     $score = (int)($data['score'] ?? 0);
     $total = (int)($data['totalVozes'] ?? 0);
     $char  = $data['character'] ?? 'massau';
-    $charsJson = json_encode($data['unlockedChars'] ?? ['massau']);
+    $clientChars = $data['unlockedChars'] ?? ['massau'];
 
-    // ANTI-CHEAT BÁSICO
-    if ($score > $MAX_POSSIBLE_SCORE) {
-        logError("Score suspeito de $insta: $score");
-        $score = $MAX_POSSIBLE_SCORE / 2; // Penaliza score impossível
-    }
+    if ($score > $MAX_POSSIBLE_SCORE) $score = $MAX_POSSIBLE_SCORE / 2;
 
     try {
         $pdo->beginTransaction();
 
-        $sql = "INSERT INTO afrodizia_players (instagram, name, best_score, total_vozes, unlocked_chars, last_char, total_runs) 
-                VALUES (:insta, :name, :score, :total, :chars, :last_char, 1)
-                ON DUPLICATE KEY UPDATE 
-                name = IF(:name2 != '', :name2, name),
-                best_score = GREATEST(best_score, :score2),
-                total_vozes = GREATEST(total_vozes, :total2),
-                unlocked_chars = :chars2,
-                last_char = :last_char2,
-                total_runs = total_runs + 1";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':insta' => $insta, ':name' => $name, ':score' => $score, ':total' => $total, ':chars' => $charsJson, ':last_char' => $char,
-            ':name2' => $name, ':score2' => $score, ':total2' => $total, ':chars2' => $charsJson, ':last_char2' => $char
-        ]);
+        // 1. Buscar progresso atual para fusão de dados (Merge)
+        $stmt = $pdo->prepare("SELECT unlocked_chars, total_vozes, best_score FROM afrodizia_players WHERE instagram = ?");
+        $stmt->execute([$insta]);
+        $existing = $stmt->fetch();
+
+        if ($existing) {
+            // Fusão de Personagens (União de arrays)
+            $serverChars = json_decode($existing['unlocked_chars']) ?? ['massau'];
+            $mergedChars = array_unique(array_merge($serverChars, $clientChars));
+            
+            // Fusão de Vozes (Sempre mantém o maior valor acumulado)
+            $finalTotal = max((int)$existing['total_vozes'], $total);
+            $finalScore = max((int)$existing['best_score'], $score);
+
+            $sql = "UPDATE afrodizia_players SET 
+                    name = IF(:name != '', :name, name),
+                    best_score = :score,
+                    total_vozes = :total,
+                    unlocked_chars = :chars,
+                    last_char = :last_char,
+                    total_runs = total_runs + 1,
+                    last_seen = NOW()
+                    WHERE instagram = :insta";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([
+                ':name' => $name, ':score' => $finalScore, ':total' => $finalTotal, 
+                ':chars' => json_encode($mergedChars), ':last_char' => $char, ':insta' => $insta
+            ]);
+            $currentChars = $mergedChars;
+            $currentTotal = $finalTotal;
+        } else {
+            // Novo Jogador
+            $sql = "INSERT INTO afrodizia_players (instagram, name, best_score, total_vozes, unlocked_chars, last_char, total_runs, last_seen) 
+                    VALUES (:insta, :name, :score, :total, :chars, :last_char, 1, NOW())";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([
+                ':insta' => $insta, ':name' => $name, ':score' => $score, ':total' => $total, 
+                ':chars' => json_encode($clientChars), ':last_char' => $char
+            ]);
+            $currentChars = $clientChars;
+            $currentTotal = $total;
+        }
+
+        // 2. Cálculo de Rank Atualizado
+        $stmtRank = $pdo->prepare("SELECT COUNT(*) + 1 as rank FROM afrodizia_players WHERE best_score > (SELECT best_score FROM afrodizia_players WHERE instagram = ?)");
+        $stmtRank->execute([$insta]);
+        $rankData = $stmtRank->fetch();
+        $rank = $rankData ? $rankData['rank'] : '?';
 
         $pdo->commit();
 
         echo json_encode([
             "success" => true, 
             "rank" => $rank, 
-            "totalVozes" => $total,
-            "unlockedChars" => json_decode($charsJson)
+            "totalVozes" => $currentTotal,
+            "unlockedChars" => $currentChars
         ]);
 
     } catch (Exception $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        logError($e->getMessage());
+        logError("Erro no POST: " . $e->getMessage());
         http_response_code(500);
-        echo json_encode(["error" => "Falha ao salvar"]);
+        echo json_encode(["success" => false, "error" => "Erro ao salvar no banco", "debug" => $e->getMessage()]);
     }
+    exit;
 }
 ?>
+

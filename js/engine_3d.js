@@ -39,7 +39,7 @@ class ShaderParticleSystem {
                 uTime: { value: 0 },
                 uGlobalZ: { value: 0 }, // OTIMIZAÇÃO
                 uColor: { value: new THREE.Color(0xffcc00) }, // Aesthetic: Strong Gold
-                uSize: { value: 14.0 } // Larger particles for cinematic bokeh feel
+                uSize: { value: 35.0 } // Partículas maiores e mais suaves para efeito bokeh no mobile
             },
             vertexShader: `
                 uniform float uTime;
@@ -500,6 +500,20 @@ class PlayerController {
                 targetOpacity = 0;
             }
             this.auraGlow.material.opacity += (targetOpacity - this.auraGlow.material.opacity) * 10 * dt;
+            
+            // --- NOVO: EFEITOS ESPECÍFICOS POR PERSONAGEM ---
+            if (this.charId === 'priscilla') {
+                // Pulso Magnético
+                this.auraGlow.scale.setScalar(1.0 + Math.sin(performance.now() * 0.01) * 0.15);
+                this.auraGlow.material.color.setHex(0x00ffcc);
+            } else if (this.charId === 'tony') {
+                // Aura de Liderança (Dourada e Larga)
+                this.auraGlow.scale.setScalar(1.3);
+                this.auraGlow.material.color.setHex(0xffcc00);
+            } else if (this.charId === 'morgado') {
+                // Aura de Proteção (Verde)
+                this.auraGlow.material.color.setHex(0x00ff00);
+            }
         }
     }
 
@@ -562,6 +576,12 @@ export class GameEngine3D {
         this.introTimer = 0;
         this.introStep = 0;
         
+        // --- NOVO: MÉTRICAS DE PONTUAÇÃO (COMBO SYSTEM) ---
+        this.combo = 0;
+        this.comboTimer = 0;
+        this.maxCombo = 0;
+        this.scoreMultiplier = 1.0;
+        
         // Environment colors
         this.normalBgColor = new THREE.Color(0x080600);
         this.stormBgColor = new THREE.Color(0x1a0b2e); // Roxo Tempestade
@@ -620,7 +640,16 @@ export class GameEngine3D {
 
     resetPowerups() {
         this.powerupTimer = 0;
+        const hud = document.getElementById('megaphone-hud');
+        if (hud) {
+            hud.style.opacity = '0';
+            hud.style.display = 'none';
+        }
+        if (this.player && this.player.sprite) {
+            this.player.sprite.material.color.setHex(0xffffff);
+        }
     }
+
 
     /**
      * Define o personagem atual e atualiza as texturas em tempo real.
@@ -689,13 +718,15 @@ export class GameEngine3D {
         this.camera.position.set(0, 18, 40);
         this.camera.lookAt(0, 5, -80);
 
-        // Renderer — otimizado para mobile (mediump + sem antialiasing)
+        // Renderer — otimizado para mobile com escalonamento de precisão
+        const useHighP = window.devicePixelRatio > 2 || !/Android|iPhone|iPad/i.test(navigator.userAgent);
         this.renderer = new THREE.WebGLRenderer({ 
-            antialias:       false,
+            antialias:       true,
             powerPreference: "high-performance",
-            precision:       "mediump",
+            precision:       useHighP ? "highp" : "mediump",
             stencil:         false,
             alpha:           false,
+            logarithmicDepthBuffer: false
         });
         this.renderer.setSize(w, h);
         this.renderer.shadowMap.enabled = false;
@@ -709,14 +740,21 @@ export class GameEngine3D {
             document.body.appendChild(vignette);
         }
         
-        // DPR dinamico — cap menor em mobile para ganho de FPS
-        this.currentPixelRatio = Math.min(window.devicePixelRatio, window.innerWidth < 600 ? 1.5 : 2.0);
+        // --- PROTOCOLO DE ALTA RESOLUÇÃO (HD MOBILE) ---
+        // Aumentando o cap para 2.0 (Retina/OLED Quality)
+        this.currentPixelRatio = Math.min(window.devicePixelRatio, 2.0);
         this.renderer.setPixelRatio(this.currentPixelRatio);
-        this.renderer.toneMapping = THREE.LinearToneMapping;
-        this.renderer.toneMappingExposure = 1.3;
-
+        
+        // Ativando Antialiasing (Otimizado)
+        this.renderer.antialias = true;
+        
+        // Otimização de Performance: Adaptive Resolution
+        this.fpsThreshold = 45;
+        this.lastFpsCheck = 0;
+        
         // GPU compositing hint no canvas
         this.renderer.domElement.style.willChange = 'transform';
+        this.renderer.domElement.style.imageRendering = 'auto'; // Melhora nitidez
         
         // Pre-cache refs DOM da cinematica
         this._cinTextEl = null; this._cinOverlay = null; this._cinLogoEl = null; this._cinImpactTime = 0;
@@ -731,7 +769,7 @@ export class GameEngine3D {
 
         // Optimized Cinematic Lighting Setup
         // Hemisphere light gives a natural gradient from sky to ground
-        const hemiLight = new THREE.HemisphereLight(0x444466, 0x222222, 2.2); // Intensidade aumentada para compensar
+        const hemiLight = new THREE.HemisphereLight(0x444466, 0x222222, 2.8); // Brilho aumentado para nitidez de cores
         this.scene.add(hemiLight);
         
         // A luz amarela itinerante (playerLight) foi REMOVIDA para limpar a visão.
@@ -798,6 +836,13 @@ export class GameEngine3D {
             p,
             (t) => { 
                 console.log(`[Asset] Textura carregada: ${k}`);
+                
+                // OTIMIZAÇÃO DE RESOLUÇÃO: Anisotropy remove borrão em ângulos rasos
+                const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+                t.anisotropy = Math.min(maxAniso, 8); 
+                t.minFilter = THREE.LinearMipmapLinearFilter;
+                t.magFilter = THREE.LinearFilter;
+                
                 this.assets.tex[k] = t; 
                 checkDone(); 
             },
@@ -898,18 +943,14 @@ export class GameEngine3D {
             this.scene.add(sidewalk);
         }
 
-        // Environment Pooling
-        const bPool = ['b1', 'b2', 'sky1'];
-        // Dropped from 30 to 12. Since camera.far is 250, anything beyond z=-210 is hidden by fog.
-        // 12 buildings spaced by 60 spans 720 units. Recycle happens completely out of sight!
-        for (let i = 0; i < 12; i++) {
-            let z = -i * 60;
-            
+        // --- RECONSTRUÇÃO DO CENÁRIO CINEMÁTICO ---
+        // Restaurando a densidade original para um visual "HD" e imersivo
+        for (let z = 0; z > -800; z -= 45) { 
             for (let side of [-1, 1]) {
-                // 1. Sempre renderiza os prédios
-                const key = bPool[Math.floor(Math.random() * bPool.length)];
-                if (this.assets.mod[key]) {
-                    const b = this.assets.mod[key].clone();
+                // Sorteio de prédios
+                const bType = Math.random() > 0.5 ? 'sky1' : (Math.random() > 0.5 ? 'b1' : 'b2');
+                if (this.assets.mod[bType]) {
+                    const b = this.assets.mod[bType].clone();
                     b.scale.set(40, 40, 40);
                     b.position.set(side * 55, 1.5, z); 
                     b.rotation.y = side === 1 ? -Math.PI/2 : Math.PI/2;
@@ -968,8 +1009,9 @@ export class GameEngine3D {
                 }
 
                 // 2. Renderiza os postes virados para a RUA com foco direcional (SpotLight)
+                // Espaçamento maior: Apenas um poste a cada 135 unidades (3 blocos de prédios)
                 const lightModel = this.assets.mod.light || this.assets.mod.streetlight;
-                if (i % 2 === 0 && lightModel) {
+                if (Math.abs(z) % 135 === 0 && lightModel) {
                     const st = lightModel.clone();
                     
                     // Escala natural do poste
@@ -1022,8 +1064,8 @@ export class GameEngine3D {
                                 float alpha = smoothstep(0.0, 1.0, vUv.y);
                                 // Bordas suaves no formato cilíndrico
                                 float edge = sin(vUv.x * 3.14159);
-                                // Opacidade máxima de 0.15 para criar o aspecto "branco meio opaco transparente"
-                                gl_FragColor = vec4(color, alpha * edge * 0.15); 
+                                // Opacidade máxima de 0.25 para um visual mais denso e "volumétrico"
+                                gl_FragColor = vec4(color, alpha * edge * 0.25); 
                             }
                         `,
                         transparent: true,
@@ -1037,19 +1079,17 @@ export class GameEngine3D {
                     st.add(lightShaft);
 
                     // 3. SpotLight Focado (Luz real emitida no chão)
-                    // Trocamos para branco (0xffffff) para acompanhar o eixo e balanceamos a intensidade
-                    const spotLight = new THREE.SpotLight(0xffffff, 12.0, 100, Math.PI / 5, 0.9, 2);
+                    // Restaurado para intensidade total e brilho expansivo
+                    const spotLight = new THREE.SpotLight(0xffffff, 20.0, 150, Math.PI / 4, 0.9, 2);
                     spotLight.position.set(bulbLocalX, bulbLocalY, bulbLocalZ);
                     
-                    // Alvo mirando o chão exatamente abaixo do bulbo
                     const target = new THREE.Object3D();
                     target.position.set(bulbLocalX, 0, bulbLocalZ); 
                     st.add(target);
                     spotLight.target = target;
 
                     st.add(spotLight);
-
-                    this.worldObjects.push({ mesh: st, type: 'streetlight' });
+                    this.worldObjects.push({ mesh: st, type: 'streetlight', light: spotLight });
                 }
             }
         }
@@ -1267,6 +1307,7 @@ export class GameEngine3D {
         
         // Força sprite de pulo (punho erguido dinâmico) enquanto cai
         this.player.isJumping = true; 
+        this.player.setFrame(2); // Fix: Garante frame de pulo na queda
         
         console.log("Cinematic Started");
     }
@@ -1460,13 +1501,26 @@ export class GameEngine3D {
         const accelRate = this.selectedChar === 'tony' ? 0.20 : 0.35;
         
         this.gameSpeed = Math.min(this.maxSpeed, this.gameSpeed + dt * accelRate);
-        this.spawnInterval = 1.5 * (this.baseSpeed / this.gameSpeed);
+        
+        // --- RITMO DE SPAWN (WAVE SYSTEM) ---
+        // Cria ondas de "tensão" e "descanso" variando o intervalo senoidalmente
+        const waveFactor = 1.0 + Math.sin(this.time * 0.5) * 0.3;
+        this.spawnInterval = (1.5 * (this.baseSpeed / this.gameSpeed)) * waveFactor;
+        
+        if (this.comboTimer > 0) {
+            this.comboTimer -= dt;
+            if (this.comboTimer <= 0) {
+                this.maxCombo = Math.max(this.maxCombo, this.combo);
+                this.combo = 0;
+                this.scoreMultiplier = 1.0;
+            }
+        }
 
         // Handle Invincibility Blinking
         if (this.invincibilityTimer > 0) {
             this.invincibilityTimer -= dt;
-            // Blink at 30hz
-            this.player.sprite.material.opacity = Math.sin(this.time * 30) > 0 ? 0.3 : 1.0;
+            // Blink at 30hz - Otimizado para não gerar stutter
+            this.player.sprite.material.opacity = Math.sin(this.time * 30) > 0 ? 0.4 : 0.9;
         } else {
             this.player.sprite.material.opacity = 1.0;
         }
@@ -1594,6 +1648,7 @@ export class GameEngine3D {
                 document.body.appendChild(hud);
             }
             hud.innerHTML = `<span style="background:linear-gradient(90deg, #ff00ff, #ffcc00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">🔥 MEGAFONE: ${this.powerupTimer.toFixed(1)}s 🔥</span>`;
+            hud.style.display = 'block';
             hud.style.opacity = 1;
             
             if (this.powerupTimer <= 0) {
@@ -1722,7 +1777,7 @@ export class GameEngine3D {
             }
             
             if (obj.mesh.position.z > 100) {
-                obj.mesh.position.z -= 720; 
+                obj.mesh.position.z -= 960; 
             }
         }
 
@@ -1840,9 +1895,24 @@ export class GameEngine3D {
                     }
                 }
             } else if (e.mesh.position.z > 50) {
-                // Pontuação por desviar removida: Os pontos são adquiridos ÚNICA e EXCLUSIVAMENTE ao pegar aliados.
                 this._recycleEntity(e, i);
             }
+        }
+
+        // --- SISTEMA DE QUALIDADE ADAPTATIVA (60FPS CONSTANTE) ---
+        if (this.lastFpsCheck === 0) this.lastFpsCheck = performance.now();
+        this.frameCount++;
+        
+        const now = performance.now();
+        if (now - this.lastFpsCheck >= 1500) { // Checa a cada 1.5s para evitar oscilação visual
+            const fps = (this.frameCount * 1000) / (now - this.lastFpsCheck);
+            if (fps < this.fpsThreshold && this.currentPixelRatio > 1.0) {
+                this.currentPixelRatio = Math.max(1.0, this.currentPixelRatio - 0.2);
+                this.renderer.setPixelRatio(this.currentPixelRatio);
+                console.log(`[Performance] FPS em ${Math.round(fps)}, otimizando resolução para ${this.currentPixelRatio.toFixed(1)}x`);
+            }
+            this.frameCount = 0;
+            this.lastFpsCheck = now;
         }
 
         this.renderer.render(this.scene, this.camera);
@@ -1878,9 +1948,10 @@ export class GameEngine3D {
         const rand = Math.random();
         let type = rand > 0.65 ? 'ally' : (rand > 0.35 ? 'barricade' : (rand > 0.05 ? 'truck' : 'powerup'));
         
-        // Apenas Massau pode usar o Megafone. Para os demais líderes, o Megafone vira um Aliado extra.
-        if (this.selectedChar !== 'massau' && type === 'powerup') {
-            type = 'ally';
+        // REGRAS DE SPAWN RESTRITAS: Somente o MASSAU tem acesso ao Megafone.
+        // Para qualquer outro personagem, o Megafone é removido do spawn.
+        if (type === 'powerup' && this.selectedChar !== 'massau') {
+            type = 'ally'; 
         }
         
         let entity = this._getFromPool(type);
@@ -2005,10 +2076,10 @@ export class GameEngine3D {
         if (this.selectedChar === 'massau') {
             const duration = 10.0;
             this.powerupTimer = duration; 
-            this._showFeedbackText(`MEGAFONE: ${duration}s!`, "#ffcc00");
+            this._showFeedbackText(`🔥 MODO MEGAFONE ATIVO!`, "#ffcc00");
         } else {
             // Caso algum outro pegue por erro (não deveria spawnar), ganha apenas bônus de score
-            this._showFeedbackText(`+50 PONTOS!`, "#ffffff");
+            this._showFeedbackText(`+50 PONTOS EXTRAS!`, "#ffffff");
         }
 
         this.hitlagTimer = 0.05;
@@ -2018,49 +2089,35 @@ export class GameEngine3D {
     }
 
     _destroyObstacle(e, i) {
-        // Efeito do megafone esmagando a barricada/caminhão no meio do caminho
-        this._showFeedbackText("SMASH!", "#ffffff");
-        this.hitlagTimer = 0.08; // Impact weight
-        
-        // Punição de velocidade mitigada: O MEGAFONE NÃO REDUZ A VELOCIDADE AO BATER! (Pedido do Usuário)
-        this.camera.position.y = 20; // Tremor forte
-        
+        this._showFeedbackText("💥 IMPACTO!", "#ffffff");
+        this.hitlagTimer = 0.08;
+        this.camera.position.y = 20;
         this._recycleEntity(e, i);
     }
 
-    /**
-     * NOVO: Limpa efeitos ativos (ex: Megafone) imediatamente.
-     * Útil para evitar o bug do cronômetro travado no fim de jogo.
-     */
     resetPowerups() {
         this.powerupTimer = 0;
     }
 
     _collectAlly(e, i) {
+        // --- SISTEMA DE COMBO ---
+        this.combo++;
+        this.comboTimer = 2.5; 
+        this.scoreMultiplier = 1.0 + (Math.floor(this.combo / 5) * 0.1); 
+        
         let earned = 20;
         if (this.powerupTimer > 0) earned *= 2;
+        earned = Math.floor(earned * this.scoreMultiplier);
         
-        // Habilidade TONY: "A Voz do Povo" - +8% de bônus por cada aliado na multidão (Máx 40%)
         if (this.selectedChar === 'tony') {
             const crowdBonus = 1 + (this.playerCrowd.length * 0.08);
             earned = Math.floor(earned * crowdBonus);
-            
-            // MECÂNICA DE PRECISÃO: Bônus de "Coleta Perfeita" se estiver bem alinhado
-            const xDist = Math.abs(e.mesh.position.x - this.player.sprite.position.x);
-            if (xDist < 1.5) {
-                earned += 15;
-                this._showFeedbackText("PERFEITO! +15", "#00ffff");
-                if (this.audio) this.audio.playJump(); // Som de confirmação extra
-            }
         }
         
         this.score += earned;
-        if (this.onScoreUpdate) this.onScoreUpdate(this.score);
+        if (this.onScoreUpdate) this.onScoreUpdate(this.score, this.combo);
         
-        // Game Feel: 30ms micro-pause for collection satisfaction
         this.hitlagTimer = 0.03; 
-        
-        // Ao serem pegos, ficam bem menores (2.8) para simular uma multidão acumulando lá atrás (perspectiva)
         e.mesh.scale.set(2.8, 2.8, 2.8);
 
         // Formação da Multidão em "V" (Não amontoados atrás)
@@ -2099,10 +2156,13 @@ export class GameEngine3D {
     }
 
     _handleHit(e, i) {
-        // Ignore collision if in I-frames
         if (this.invincibilityTimer > 0) return;
+        
+        // --- RESET DE COMBO AO TOMAR DANO ---
+        this.combo = 0;
+        this.scoreMultiplier = 1.0;
 
-        // Habilidade TONY: "A Voz do Povo" - Os aliados tomam o dano. Tony não perde pontos, mas perde 2 aliados.
+        // Mecânica Única: TONY (Perde aliados, mas preserva a pontuação)
         if (this.selectedChar === 'tony' && this.playerCrowd.length > 0) {
             const alliesToLose = Math.min(2, this.playerCrowd.length);
             for (let j = 0; j < alliesToLose; j++) {
@@ -2110,40 +2170,28 @@ export class GameEngine3D {
                 lostAlly.mesh.visible = false;
                 this.pools['ally'].push({ mesh: lostAlly.mesh, type: 'ally' });
             }
-            this._showFeedbackText(`-${alliesToLose} ALIADOS!`, "#ff3300");
+            this._showFeedbackText("⚠️ ALIADO DISPERSADO!", "#ff3300");
         } else {
-            // PUNITIVO MAS GRACIOSO para os demais: Perde 100 vozes e 1 aliado da multidão
+            // Padrão: Perda de 100 vozes e 1 aliado
             this.score = Math.max(0, this.score - 100);
             if (this.onScoreUpdate) this.onScoreUpdate(this.score);
             
             if (this.playerCrowd.length > 0) {
-                // Remove o último aliado coletado
                 const lostAlly = this.playerCrowd.pop();
                 lostAlly.mesh.visible = false;
                 this.pools['ally'].push({ mesh: lostAlly.mesh, type: 'ally' });
             }
-            this._showFeedbackText("-100 VOZES!", "#ff3300");
+            this._showFeedbackText("💔 CONEXÃO PERDIDA!", "#ff3300");
         }
         
-        // Game Feel: 120ms global freeze frame for impact weight
         this.hitlagTimer = 0.12; 
-        // 1.5 seconds of safety so player doesn't get combo'd
         this.invincibilityTimer = 1.5; 
         
-        // Perda de velocidade: Priscilla tem "Jaqueta de Combate" que reduz a desaceleração
-        if (this.selectedChar === 'priscilla') {
-            // Ela não volta para a lentidão total, mantém um pouco da inércia
-            this.gameSpeed = Math.max(this.baseSpeed + 12, this.gameSpeed * 0.5);
-        } else {
-            this.gameSpeed = this.baseSpeed;
-        }
+        // Priscilla mantém mais inércia após o impacto
+        this.gameSpeed = (this.selectedChar === 'priscilla') ? Math.max(this.baseSpeed + 12, this.gameSpeed * 0.5) : this.baseSpeed;
         
-        // Screen shake intensity boost
         this.camera.position.y = 19; 
-        
         this._recycleEntity(e, i);
-        
-        this._showFeedbackText("-100 VOZES!", "#ff3300");
     }
 
     _showFeedbackText(text, color) {

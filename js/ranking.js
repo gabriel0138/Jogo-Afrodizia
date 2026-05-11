@@ -1,9 +1,9 @@
 // ==========================================
-// 🏆 RANKING SYSTEM — AFRODIZIA (HYBRID)
+// 🏆 RANKING SYSTEM — AFRODIZIA (PHP/MYSQL)
 // ==========================================
 
-const API_URL = 'ranking.php'; 
-const VERCEL_URL = '/api/ranking';
+// --- CONFIGURAÇÃO DO ENDPOINT (LOCAWEB) ---
+const API_URL = 'http://afrodizia.com.br/ranking.php';
 
 export const CHAR_ICONS = {
     massau:   '🎤',
@@ -21,10 +21,48 @@ export const CHAR_NAMES = {
     sub:      'Sub'
 };
 
+async function _fetchAPI(params = {}, method = 'GET', body = null) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s para conexões muito lentas
+
+    const retry = async (retries = 2) => {
+        try {
+            const url = new URL(API_URL);
+            if (method === 'GET') {
+                Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+            }
+
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                cache: 'no-store'
+            };
+            if (body) options.body = JSON.stringify(body);
+
+            const response = await fetch(url, options);
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (retries > 0 && error.name !== 'AbortError') {
+                console.warn(`[Network] Tentando reconectar... (${retries})`);
+                await new Promise(r => setTimeout(r, 2000)); // Espera 2s antes de tentar de novo
+                return retry(retries - 1);
+            }
+            return null;
+        }
+    };
+
+    return retry();
+}
+
+
 export async function saveScore(entry) {
     const payload = {
         name:      entry.name.substring(0, 25),
-        instagram: entry.instagram.replace(/[^a-zA-Z0-9._]/g, '').substring(0, 30),
+        instagram: entry.instagram.toLowerCase().replace(/\s/g, '').replace(/^@/, ''), 
         character: entry.character,
         score:     Math.min(Math.max(0, parseInt(entry.score) || 0), 999999),
         totalVozes: parseInt(entry.totalVozes) || 0,
@@ -32,27 +70,16 @@ export async function saveScore(entry) {
         timestamp: Date.now(),
     };
 
-    try {
-        let response = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+    console.log('[Ranking] Sincronizando score com MySQL...', payload.instagram);
 
-        if (!response.ok || response.status === 404) {
-            response = await fetch(VERCEL_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-        }
-
-        if (response.ok) {
-            const data = await response.json();
-            return { rank: data.rank || '??', totalVozes: payload.totalVozes, unlockedChars: payload.unlockedChars };
-        }
-    } catch (err) {
-        console.warn('[Ranking] Usando cache local.', err);
+    const data = await _fetchAPI({}, 'POST', payload);
+    if (data && data.success) {
+        console.log('[Ranking] Sincronizado!', data);
+        return { 
+            rank: data.rank || '??', 
+            totalVozes: data.totalVozes || payload.totalVozes, 
+            unlockedChars: data.unlockedChars || payload.unlockedChars 
+        };
     }
 
     _saveLocal(payload);
@@ -62,39 +89,46 @@ export async function saveScore(entry) {
     return { rank: rank || '-', totalVozes: payload.totalVozes, unlockedChars: payload.unlockedChars };
 }
 
-export async function getTopScores(limit = 20) {
-    try {
-        let response = await fetch(`${API_URL}?limit=${limit}`);
-        
-        if (!response.ok || response.status === 404) {
-            response = await fetch(`${VERCEL_URL}?limit=${limit}`);
-        }
+let _rankingCache = { data: null, time: 0 };
 
-        if (response.ok) return await response.json();
-    } catch (err) {
-        console.warn('[Ranking] Offline.');
+export async function getTopScores(limit = 20, instagram = '') {
+    // Otimização: Cache local de 60 segundos para evitar flood no servidor
+    const now = Date.now();
+    if (_rankingCache.data && (now - _rankingCache.time < 60000) && limit <= 20) {
+        console.log('[Ranking] Usando cache local');
+        return _rankingCache.data;
     }
-    return getLocalScores().sort((a, b) => b.score - a.score).slice(0, limit);
+
+    const data = await _fetchAPI({ limit, instagram });
+    if (data) {
+        _rankingCache = { data, time: now };
+        return data;
+    }
+
+    console.warn('[Ranking] Usando dados locais (Offline)');
+    return { 
+        top: getLocalScores().sort((a, b) => b.score - a.score).slice(0, limit), 
+        player: null 
+    };
 }
+
 
 export async function getPlayerProfile(instagram) {
-    try {
-        let response = await fetch(`${API_URL}?instagram=${instagram}`);
-        if (!response.ok || response.status === 404) {
-            response = await fetch(`${VERCEL_URL}?instagram=${instagram}`);
-        }
-        if (response.ok) return await response.json();
-    } catch (err) { }
-    return null;
+    const data = await _fetchAPI({ instagram });
+    return data ? data.player : null;
 }
+
+
 
 function _saveLocal(entry) {
     let scores = getLocalScores();
     const idx = scores.findIndex(s => s.instagram === entry.instagram);
     if (idx > -1) {
+        // Só atualiza se o score for maior, mas sempre atualiza vozes e chars
         scores[idx].score = Math.max(scores[idx].score, entry.score);
         scores[idx].totalVozes = entry.totalVozes;
         scores[idx].unlockedChars = entry.unlockedChars;
+        scores[idx].name = entry.name;
     } else {
         scores.push(entry);
     }
@@ -103,21 +137,29 @@ function _saveLocal(entry) {
 
 export function getLocalScores() {
     try {
-        return JSON.parse(localStorage.getItem('afrodizia_ranking')) || [];
+        const local = localStorage.getItem('afrodizia_ranking');
+        return local ? JSON.parse(local) : [];
     } catch (e) { return []; }
 }
 
-export function renderRankingHTML(scores, currentInstagram = '') {
+export function renderRankingHTML(data, currentInstagram = '') {
+    // Garante que scores seja um array
+    const scores = data && data.top ? data.top : (Array.isArray(data) ? data : []);
+    const playerInfo = data && data.player ? data.player : null;
+
     if (!scores || scores.length === 0) {
-        return `<div class="ranking-empty">Seja o primeiro a entrar no ranking! 🔥</div>`;
+        return `<div class="ranking-empty">Seja o primeiro a entrar no Ranking Mundial! 🏆</div>`;
     }
 
+
     let html = scores.map((entry, i) => {
-        const isCurrent = currentInstagram && entry.instagram && entry.instagram.toLowerCase() === currentInstagram.toLowerCase();
+        const entryInsta = (entry.instagram || '').toLowerCase();
+        const isCurrent = currentInstagram && entryInsta === currentInstagram.toLowerCase();
         const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : i + 1));
-        const icon = CHAR_ICONS[entry.character] || '🎤';
-        const charName = CHAR_NAMES[entry.character] || entry.character;
-        const scoreFormatted = (entry.score || entry.best_score || 0).toLocaleString('pt-BR');
+        const icon = CHAR_ICONS[entry.character] || CHAR_ICONS[entry.last_char] || '🎤';
+        const charName = CHAR_NAMES[entry.character] || CHAR_NAMES[entry.last_char] || 'Líder';
+        const scoreValue = entry.best_score !== undefined ? entry.best_score : (entry.score || 0);
+        const scoreFormatted = scoreValue.toLocaleString('pt-BR');
 
         return `
         <div class="ranking-row ${isCurrent ? 'ranking-row--current' : ''}">
@@ -134,33 +176,30 @@ export function renderRankingHTML(scores, currentInstagram = '') {
         </div>`;
     }).join('');
 
-    if (currentInstagram) {
-        const isPlayerInTop = scores.some(e => e.instagram.toLowerCase() === currentInstagram.toLowerCase());
-        if (!isPlayerInTop) {
-            const localScores = getLocalScores();
-            const playerEntry = localScores.find(e => e.instagram.toLowerCase() === currentInstagram.toLowerCase());
-            
-            if (playerEntry) {
-                const icon = CHAR_ICONS[playerEntry.character] || '🎵';
-                const charName = CHAR_NAMES[playerEntry.character] || playerEntry.character;
-                const scoreFormatted = playerEntry.score.toLocaleString('pt-BR');
+    // Se o jogador não está no Top exibido, mostra sua posição individual
+    const isPlayerInTop = scores.some(e => (e.instagram || '').toLowerCase() === (currentInstagram || '').toLowerCase());
+    
+    if (currentInstagram && !isPlayerInTop && playerInfo) {
+        const icon = CHAR_ICONS[playerInfo.character] || CHAR_ICONS[playerInfo.last_char] || '🎵';
+        const charName = CHAR_NAMES[playerInfo.character] || CHAR_NAMES[playerInfo.last_char] || 'Você';
+        const scoreValue = playerInfo.best_score !== undefined ? playerInfo.best_score : (playerInfo.score || 0);
+        const scoreFormatted = scoreValue.toLocaleString('pt-BR');
+        const rankValue = playerInfo.rank || '?';
 
-                html += `
-                <div class="ranking-divider" style="text-align:center; color:#444; margin: 10px 0;">...</div>
-                <div class="ranking-row ranking-row--current">
-                    <span class="rank-pos">#</span>
-                    <div class="rank-info">
-                        <span class="rank-name">${escapeHtml(playerEntry.name)} (VOCÊ)</span>
-                        <span class="rank-insta">@${escapeHtml(playerEntry.instagram)}</span>
-                    </div>
-                    <div class="rank-char">
-                        <span class="rank-char-icon">${icon}</span>
-                        <span class="rank-char-name">${charName}</span>
-                    </div>
-                    <span class="rank-score">${scoreFormatted}</span>
-                </div>`;
-            }
-        }
+        html += `
+        <div class="ranking-divider" style="text-align:center; color:#666; margin: 15px 0; font-size: 0.8rem;">--- SUA POSIÇÃO ---</div>
+        <div class="ranking-row ranking-row--current">
+            <span class="rank-pos">#${rankValue}</span>
+            <div class="rank-info">
+                <span class="rank-name">${escapeHtml(playerInfo.name)}</span>
+                <span class="rank-insta">@${escapeHtml(playerInfo.instagram)}</span>
+            </div>
+            <div class="rank-char">
+                <span class="rank-char-icon">${icon}</span>
+                <span class="rank-char-name">${charName}</span>
+            </div>
+            <span class="rank-score">${scoreFormatted}</span>
+        </div>`;
     }
 
     return html;
@@ -168,7 +207,14 @@ export function renderRankingHTML(scores, currentInstagram = '') {
 
 function escapeHtml(str) {
     if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return str.replace(/[&<>"']/g, function(m) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[m];
+    });
 }
+
