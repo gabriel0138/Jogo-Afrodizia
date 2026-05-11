@@ -1225,10 +1225,10 @@ export class GameEngine3D {
         
         // Material de chuva fotorrealista (partículas brancas finas e semi-transparentes)
         const mat = new THREE.PointsMaterial({
-            color: 0xaaaaaa,
-            size: 0.15,
+            color: 0xffcc00, // Dourado brilhante para o Super Modo
+            size: 0.35, // Partículas maiores
             transparent: true,
-            opacity: 0.4,
+            opacity: 0.8,
             blending: THREE.AdditiveBlending,
             depthWrite: false
         });
@@ -1657,20 +1657,29 @@ export class GameEngine3D {
             }
         }
 
-        // Lógica Etapa 2: SISTEMA CLIMÁTICO (TEMPESTADE FOTORREALISTA)
+        // Lógica Etapa 2: MODO PLUS (SUPER MODO PARA >= 1500 PONTOS)
         if (this.score >= 1500 && !this.isStorm) {
             this.isStorm = true;
-            this._showFeedbackText("TEMPESTADE!", "#b400ff");
-            this._createRainSystem(); // Aciona as partículas de chuva
+            this._showFeedbackText("SUPER MODO ATIVADO!", "#ffcc00");
+            this._createRainSystem(); // Partículas douradas (recompensa)
+        } else if (this.score < 1500 && this.isStorm) {
+            this.isStorm = false;
+            this._showFeedbackText("MODO NORMAL", "#ffffff");
+            if (this.rainSystem) {
+                this.scene.remove(this.rainSystem);
+                this.rainSystem.geometry.dispose();
+                this.rainSystem.material.dispose();
+                this.rainSystem = null;
+            }
         }
 
         if (this.isStorm) {
             if (this.rainSystem) {
-                // Atualização gravitacional e inercial da chuva caindo no pára-brisa/câmera
+                // Animação das partículas de energia/chuva dourada puxando pra tela
                 const positions = this.rainSystem.geometry.attributes.position.array;
                 const vels = this.rainSystem.userData.velocities;
                 for(let i=0; i<vels.length; i++) {
-                    positions[i*3+1] -= vels[i] + (activeSpeed * 0.1); 
+                    positions[i*3+1] -= vels[i] + (activeSpeed * 0.15); // Cai mais rápido
                     if(positions[i*3+1] < 0) {
                         positions[i*3+1] = 100;
                         positions[i*3] = (Math.random() - 0.5) * 100; 
@@ -1679,17 +1688,24 @@ export class GameEngine3D {
                 this.rainSystem.geometry.attributes.position.needsUpdate = true;
             }
             
-            // Transição gradual da cena para Roxo Profundo com custo 0 de GPU
-            this.scene.background.lerp(this.stormBgColor, 1.5 * dt);
-            this.scene.fog.color.lerp(this.stormBgColor, 1.5 * dt);
+            // Transição para um tom Dourado/Escuro Épico
+            const epicColor = new THREE.Color(0x1a1000);
+            this.scene.background.lerp(epicColor, 1.5 * dt);
+            this.scene.fog.color.lerp(epicColor, 1.5 * dt);
             
-            // Trovões aleatórios modulando a Exposição do HDR (HDR Tone Mapping)
-            if (Math.random() > 0.995) {
-                this.scene.background.setHex(0xffffff); // Flash branco
-                this.renderer.toneMappingExposure = 3.0; // Estouro de luz
+            // Flashes Dourados de Velocidade
+            if (Math.random() > 0.98) {
+                this.scene.background.setHex(0xffaa00); 
+                this.renderer.toneMappingExposure = 3.5; 
             } else {
-                this.renderer.toneMappingExposure += (1.3 - this.renderer.toneMappingExposure) * 10 * dt;
+                this.renderer.toneMappingExposure += (1.5 - this.renderer.toneMappingExposure) * 10 * dt;
             }
+        } else if (!this.isIntro) {
+            // Restaura as cores originais da noite suavemente
+            const targetColor = new THREE.Color(0x050508);
+            this.scene.background.lerp(targetColor, 1.5 * dt);
+            this.scene.fog.color.lerp(targetColor, 1.5 * dt);
+            this.renderer.toneMappingExposure += (1.3 - this.renderer.toneMappingExposure) * 2 * dt;
         }
 
         // Dynamic Resolution Scaling (Targeting 60FPS)

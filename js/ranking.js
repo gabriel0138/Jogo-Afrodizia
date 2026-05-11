@@ -35,9 +35,10 @@ async function _fetchAPI(params = {}, method = 'GET', body = null) {
 
     const retry = async (retries = 2) => {
         try {
-            const url = new URL(API_URL);
-            if (method === 'GET') {
-                Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+            let fetchUrl = API_URL;
+            if (method === 'GET' && Object.keys(params).length > 0) {
+                const qs = new URLSearchParams(params).toString();
+                fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + qs;
             }
 
             const options = {
@@ -48,7 +49,7 @@ async function _fetchAPI(params = {}, method = 'GET', body = null) {
             };
             if (body) options.body = JSON.stringify(body);
 
-            const response = await fetch(url, options);
+            const response = await fetch(fetchUrl, options);
             clearTimeout(timeoutId);
 
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
