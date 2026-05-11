@@ -1531,7 +1531,7 @@ export class GameEngine3D {
             if (!this.morgadoSkillTimer) this.morgadoSkillTimer = 0;
             this.morgadoSkillTimer += dt;
             
-            if (this.morgadoSkillTimer >= 8.0) {
+            if (this.morgadoSkillTimer >= 6.0) { // Cooldown reduzido para uso mais frequente
                 this.morgadoSkillTimer = 0;
                 
                 // Tremor de impacto sonoro violento (Camera Shake)
@@ -1601,20 +1601,20 @@ export class GameEngine3D {
                 for (let i = this.entities.length - 1; i >= 0; i--) {
                     const e = this.entities[i];
                     
-                    // 1. Coleta Menor (Alcance reduzido de -250 para -80)
-                    if ((e.type === 'ally' || e.type === 'powerup') && e.mesh.position.z < -20 && e.mesh.position.z > -80) {
+                    // 1. Coleta Aprimorada (Alcance expandido para -150)
+                    if ((e.type === 'ally' || e.type === 'powerup') && e.mesh.position.z < -10 && e.mesh.position.z > -150) {
                         e.mesh.position.x = this.player.sprite.position.x;
                         e.mesh.position.z = this.player.sprite.position.z;
                     } 
-                    // 2. Destruição Explosiva (Qualquer obstáculo ao redor OU na linha reta)
+                    // 2. Destruição Explosiva Aprimorada
                     else if ((e.type === 'barricade' || e.type === 'truck') && e.mesh.position.z < -5) {
                         const dx = Math.abs(e.mesh.position.x - this.player.sprite.position.x);
                         const dz = Math.abs(e.mesh.position.z - this.player.sprite.position.z);
                         const dist = Math.sqrt(dx*dx + dz*dz);
                         
-                        // Quebra TUDO em um raio de 25 unidades OU em linha reta até 300 unidades
-                        const isInRadius = dist < 25.0;
-                        const isSameLaneLongRange = (dx < 5.5 && e.mesh.position.z > -300);
+                        // Raio de destruição maior
+                        const isInRadius = dist < 35.0;
+                        const isSameLaneLongRange = (dx < 6.5 && e.mesh.position.z > -400);
                         
                         if (isInRadius || isSameLaneLongRange) {
                             this._destroyObstacle(e, i);
@@ -1836,25 +1836,7 @@ export class GameEngine3D {
             const previousZ = e.mesh.position.z;
             e.mesh.position.z += scrollDist;
 
-            // NOVO: Habilidade Tática da Priscilla - Magnetismo de Vozes (POTENCIALIZADO)
-            if (this.selectedChar === 'priscilla' && (e.type === 'ally' || e.type === 'powerup')) {
-                const magnetRange = 75.0; // Alcance aumentado para Priscilla
-                const dx = this.player.sprite.position.x - e.mesh.position.x;
-                const dz = this.player.sprite.position.z - e.mesh.position.z;
-                const distSq = dx * dx + dz * dz;
-
-                if (distSq < magnetRange * magnetRange) {
-                    const dist = Math.sqrt(distSq);
-                    const pullStrength = (1.0 - dist / magnetRange) * 140.0;
-                    e.mesh.position.x += (dx / dist) * pullStrength * dt;
-                    e.mesh.position.z += (dz / dist) * pullStrength * dt;
-                    
-                    // Efeito visual de rastro magnético (Partículas Douradas)
-                    if (this.particles && Math.random() > 0.8) {
-                        this.particles.emit(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, 1);
-                    }
-                }
-            }
+            // (Magnetismo da Priscilla removido - foco exclusivo no salto tático)
             if (e.type === 'powerup') {
                 e.mesh.rotation.y += 5.0 * dt; // Rotação rápida na horizontal (Eixo Y real do 3D)
                 e.mesh.rotation.x = 0; // Travado para não girar pro chão
@@ -2199,9 +2181,8 @@ export class GameEngine3D {
             }
             this._showFeedbackText("⚠️ ALIADO DISPERSADO!", "#ff3300");
         } else {
-            // Habilidade Única MORGADO: Tank (Perde apenas 30 vozes em vez de 100)
-            const damage = (this.selectedChar === 'morgado') ? 30 : 100;
-            this.score = Math.max(0, this.score - damage);
+            // Padrão: Perda de 100 vozes e 1 aliado
+            this.score = Math.max(0, this.score - 100);
             
             if (this.onScoreUpdate) this.onScoreUpdate(this.score);
             
@@ -2210,14 +2191,13 @@ export class GameEngine3D {
                 lostAlly.mesh.visible = false;
                 this.pools['ally'].push({ mesh: lostAlly.mesh, type: 'ally' });
             }
-            this._showFeedbackText((this.selectedChar === 'morgado') ? "🛡️ DANO REDUZIDO!" : "💔 CONEXÃO PERDIDA!", (this.selectedChar === 'morgado') ? "#00ffff" : "#ff3300");
+            this._showFeedbackText("💔 CONEXÃO PERDIDA!", "#ff3300");
         }
         
         this.hitlagTimer = 0.12; 
         this.invincibilityTimer = 1.5; 
         
-        // Priscilla mantém mais inércia após o impacto
-        this.gameSpeed = (this.selectedChar === 'priscilla') ? Math.max(this.baseSpeed + 12, this.gameSpeed * 0.5) : this.baseSpeed;
+        this.gameSpeed = this.baseSpeed;
         
         this.camera.position.y = 19; 
         this._recycleEntity(e, i);
