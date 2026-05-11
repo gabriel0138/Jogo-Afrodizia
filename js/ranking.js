@@ -2,8 +2,13 @@
 // 🏆 RANKING SYSTEM — AFRODIZIA (PHP/MYSQL)
 // ==========================================
 
-// --- CONFIGURAÇÃO DO ENDPOINT (LOCAWEB) ---
-const API_URL = 'http://afrodizia.com.br/ranking.php';
+// --- CONFIGURAÇÃO DO ENDPOINT DINÂMICO ---
+const IS_PRODUCTION = window.location.hostname === 'afrodizia.com.br';
+const API_URL = IS_PRODUCTION 
+    ? 'http://afrodizia.com.br/ranking.php' 
+    : (window.location.hostname === 'localhost' || window.location.hostname.includes('vercel.app') 
+        ? '/api/ranking' 
+        : 'http://afrodizia.com.br/ranking.php');
 
 export const CHAR_ICONS = {
     massau:   '🎤',
