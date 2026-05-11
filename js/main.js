@@ -291,11 +291,11 @@ document.getElementById('btn-restart')?.addEventListener('click', () => {
 
 document.getElementById('btn-open-ranking')?.addEventListener('click', () => {
     rankingScreen.style.display = 'flex';
-    loadRanking(document.getElementById('ranking-full-list'), 50);
+    loadRanking(document.getElementById('ranking-full-list'), 20);
 });
 document.getElementById('btn-open-ranking-end')?.addEventListener('click', () => {
     rankingScreen.style.display = 'flex';
-    loadRanking(document.getElementById('ranking-full-list'), 50);
+    loadRanking(document.getElementById('ranking-full-list'), 20);
 });
 document.getElementById('btn-close-ranking')?.addEventListener('click', () => {
     rankingScreen.style.display = 'none';
@@ -347,6 +347,13 @@ function startGame() {
         scoreDisplay.parentElement.classList.add('score-pulse');
     };
     engine.onGameOver = endGame;
+    
+    if (audioSys) {
+        audioSys.onEnded = () => {
+            if (isPlaying) endGame(engine.score);
+        };
+    }
+    
     engine.startCinematic();
     
     isPlaying = true;

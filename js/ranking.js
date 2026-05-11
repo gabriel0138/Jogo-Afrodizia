@@ -3,12 +3,15 @@
 // ==========================================
 
 // --- CONFIGURAÇÃO DO ENDPOINT DINÂMICO ---
-const IS_PRODUCTION = window.location.hostname === 'afrodizia.com.br';
-const API_URL = IS_PRODUCTION 
-    ? 'http://afrodizia.com.br/ranking.php' 
-    : (window.location.hostname === 'localhost' || window.location.hostname.includes('vercel.app') 
-        ? '/api/ranking' 
-        : 'http://afrodizia.com.br/ranking.php');
+const hostname = window.location.hostname;
+const IS_PRODUCTION = hostname === 'afrodizia.com.br' || hostname === 'www.afrodizia.com.br';
+const IS_LOCAL = hostname === 'localhost' || hostname === '127.0.0.1';
+const IS_VERCEL = hostname.includes('vercel.app');
+
+const API_URL = (IS_LOCAL || IS_VERCEL) 
+    ? '/api/ranking' 
+    : 'https://afrodizia.com.br/ranking.php';
+
 
 export const CHAR_ICONS = {
     massau:   '🎤',

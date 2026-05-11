@@ -1904,12 +1904,16 @@ export class GameEngine3D {
         this.frameCount++;
         
         const now = performance.now();
-        if (now - this.lastFpsCheck >= 1500) { // Checa a cada 1.5s para evitar oscilação visual
+        if (now - this.lastFpsCheck >= 1500) { 
             const fps = (this.frameCount * 1000) / (now - this.lastFpsCheck);
-            if (fps < this.fpsThreshold && this.currentPixelRatio > 1.0) {
-                this.currentPixelRatio = Math.max(1.0, this.currentPixelRatio - 0.2);
+            // Mantendo resolução mínima em 1.3 para não sacrificar muito visual no mobile
+            if (fps < this.fpsThreshold && this.currentPixelRatio > 1.3) {
+                this.currentPixelRatio = Math.max(1.3, this.currentPixelRatio - 0.2);
                 this.renderer.setPixelRatio(this.currentPixelRatio);
-                console.log(`[Performance] FPS em ${Math.round(fps)}, otimizando resolução para ${this.currentPixelRatio.toFixed(1)}x`);
+            } else if (fps > 55 && this.currentPixelRatio < Math.min(window.devicePixelRatio, 2.0)) {
+                // Recupera resolução se estiver rodando suave
+                this.currentPixelRatio = Math.min(window.devicePixelRatio, this.currentPixelRatio + 0.1);
+                this.renderer.setPixelRatio(this.currentPixelRatio);
             }
             this.frameCount = 0;
             this.lastFpsCheck = now;
@@ -2095,9 +2099,7 @@ export class GameEngine3D {
         this._recycleEntity(e, i);
     }
 
-    resetPowerups() {
-        this.powerupTimer = 0;
-    }
+
 
     _collectAlly(e, i) {
         // --- SISTEMA DE COMBO ---
