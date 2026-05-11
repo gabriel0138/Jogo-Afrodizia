@@ -1209,36 +1209,37 @@ export class GameEngine3D {
     }
 
     _createRainSystem() {
-        const count = 1500;
+        const count = 300; // Menos partículas, mas mais longas
         const geo = new THREE.BufferGeometry();
         const pos = new Float32Array(count * 3);
         const vels = new Float32Array(count);
 
         for (let i = 0; i < count; i++) {
-            pos[i * 3] = (Math.random() - 0.5) * 120;     // X: Spread across the road/buildings
-            pos[i * 3 + 1] = Math.random() * 100;         // Y: Start high
-            pos[i * 3 + 2] = (Math.random() - 0.5) * 200; // Z: Spread along the track
-            vels[i] = 1.5 + Math.random() * 2.0;          // Varied fall speed
+            pos[i * 3] = (Math.random() - 0.5) * 80;     // X: Spread
+            pos[i * 3 + 1] = Math.random() * 40;         // Y: Altura
+            pos[i * 3 + 2] = (Math.random() - 0.5) * 300; // Z: Longo alcance
+            vels[i] = 10.0 + Math.random() * 15.0;       // Velocidade altíssima no eixo Z
         }
 
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         
-        // Material de chuva fotorrealista (partículas brancas finas e semi-transparentes)
+        // Material de Warp Speed: Linhas longas emissivas
         const mat = new THREE.PointsMaterial({
-            color: 0xffcc00, // Dourado brilhante para o Super Modo
-            size: 0.35, // Partículas maiores
+            color: 0x00ffff, // Azul cyano futurista / Cyberpunk
+            size: 0.8,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.9,
             blending: THREE.AdditiveBlending,
             depthWrite: false
         });
 
         this.rainSystem = new THREE.Points(geo, mat);
         this.rainSystem.userData = { velocities: vels };
-        this.scene.add(this.rainSystem);
         
-        // Efeito extra: Vento/Inclinação da chuva (Aesthetic)
-        this.rainSystem.rotation.z = 0.1; 
+        // Escalar o Z absurdamente para as partículas parecerem "Lasers" ou linhas de dobra espacial
+        this.rainSystem.scale.z = 20.0;
+        
+        this.scene.add(this.rainSystem);
     }
 
     _showUI() {
@@ -1675,27 +1676,28 @@ export class GameEngine3D {
 
         if (this.isStorm) {
             if (this.rainSystem) {
-                // Animação das partículas de energia/chuva dourada puxando pra tela
+                // Efeito Warp Speed: Linhas correndo pelo eixo Z em direção à câmera
                 const positions = this.rainSystem.geometry.attributes.position.array;
                 const vels = this.rainSystem.userData.velocities;
                 for(let i=0; i<vels.length; i++) {
-                    positions[i*3+1] -= vels[i] + (activeSpeed * 0.15); // Cai mais rápido
-                    if(positions[i*3+1] < 0) {
-                        positions[i*3+1] = 100;
-                        positions[i*3] = (Math.random() - 0.5) * 100; 
+                    positions[i*3+2] += vels[i] + (activeSpeed * 0.2); // Z corre na direção positiva
+                    if(positions[i*3+2] > 100) { // Se passou da câmera
+                        positions[i*3+2] = -300; // Reseta lá atrás
+                        positions[i*3] = (Math.random() - 0.5) * 80;   // Novo X
+                        positions[i*3+1] = Math.random() * 40;         // Novo Y
                     }
                 }
                 this.rainSystem.geometry.attributes.position.needsUpdate = true;
             }
             
-            // Transição para um tom Dourado/Escuro Épico
-            const epicColor = new THREE.Color(0x1a1000);
+            // Transição para um tom Cyperbunk Escuro / Neon Azulado
+            const epicColor = new THREE.Color(0x00051a); // Fundo espacial escuro azulado
             this.scene.background.lerp(epicColor, 1.5 * dt);
             this.scene.fog.color.lerp(epicColor, 1.5 * dt);
             
-            // Flashes Dourados de Velocidade
+            // Flashes Neon Cyano de Velocidade
             if (Math.random() > 0.98) {
-                this.scene.background.setHex(0xffaa00); 
+                this.scene.background.setHex(0x00ffff); 
                 this.renderer.toneMappingExposure = 3.5; 
             } else {
                 this.renderer.toneMappingExposure += (1.5 - this.renderer.toneMappingExposure) * 10 * dt;
@@ -2125,9 +2127,12 @@ export class GameEngine3D {
         // --- SISTEMA DE COMBO ---
         this.combo++;
         this.comboTimer = 2.5; 
-        this.scoreMultiplier = 1.0 + (Math.floor(this.combo / 5) * 0.1); 
         
-        let earned = 20;
+        // Habilidade Única SUB: Multiplicador de combo sobe muito mais rápido
+        const comboStep = (this.selectedChar === 'sub') ? 2 : 5;
+        this.scoreMultiplier = 1.0 + (Math.floor(this.combo / comboStep) * 0.1); 
+        
+        let earned = 15;
         if (this.powerupTimer > 0) earned *= 2;
         earned = Math.floor(earned * this.scoreMultiplier);
         
@@ -2194,8 +2199,10 @@ export class GameEngine3D {
             }
             this._showFeedbackText("⚠️ ALIADO DISPERSADO!", "#ff3300");
         } else {
-            // Padrão: Perda de 100 vozes e 1 aliado
-            this.score = Math.max(0, this.score - 100);
+            // Habilidade Única MORGADO: Tank (Perde apenas 30 vozes em vez de 100)
+            const damage = (this.selectedChar === 'morgado') ? 30 : 100;
+            this.score = Math.max(0, this.score - damage);
+            
             if (this.onScoreUpdate) this.onScoreUpdate(this.score);
             
             if (this.playerCrowd.length > 0) {
@@ -2203,7 +2210,7 @@ export class GameEngine3D {
                 lostAlly.mesh.visible = false;
                 this.pools['ally'].push({ mesh: lostAlly.mesh, type: 'ally' });
             }
-            this._showFeedbackText("💔 CONEXÃO PERDIDA!", "#ff3300");
+            this._showFeedbackText((this.selectedChar === 'morgado') ? "🛡️ DANO REDUZIDO!" : "💔 CONEXÃO PERDIDA!", (this.selectedChar === 'morgado') ? "#00ffff" : "#ff3300");
         }
         
         this.hitlagTimer = 0.12; 
