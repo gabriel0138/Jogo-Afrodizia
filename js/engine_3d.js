@@ -1777,7 +1777,11 @@ export class GameEngine3D {
             }
             
             if (obj.mesh.position.z > 100) {
-                obj.mesh.position.z -= 960; 
+                if (obj.type === 'ground_decal') {
+                    obj.mesh.position.z -= 1025; // 41 * 25 = 1025
+                } else {
+                    obj.mesh.position.z -= 810; // 18 * 45 = 810
+                }
             }
         }
 

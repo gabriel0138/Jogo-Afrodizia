@@ -199,6 +199,22 @@ async function submitRegister(skip = false) {
             }
             setTimeout(() => proceed(), 1000);
             return;
+        } else {
+            // Cria o perfil na base de dados online imediatamente
+            await saveScore({
+                name: playerName,
+                instagram: playerInstagram,
+                character: 'massau',
+                score: 0,
+                totalVozes: totalVozes,
+                unlockedChars: unlockedChars
+            });
+            if (errorEl) {
+                errorEl.style.color = "#00ff88";
+                errorEl.innerText = `PERFIL CRIADO: @${playerInstagram}`;
+            }
+            setTimeout(() => proceed(), 1000);
+            return;
         }
     } catch(e) {
         console.error("Erro no login:", e);
